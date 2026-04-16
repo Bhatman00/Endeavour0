@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'login_screen.dart'; 
+import 'login_screen.dart';
 import 'home_screen.dart'; // Imports the new Home Screen
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const EndeavourApp());
 }
 
@@ -21,7 +19,10 @@ class EndeavourApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       // Automatically route user based on Auth State
@@ -32,7 +33,9 @@ class EndeavourApp extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               backgroundColor: Color(0xFF0F0F13),
-              body: Center(child: CircularProgressIndicator(color: Colors.white)),
+              body: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
             );
           }
           // If the user is logged in, send them to the Path Chooser

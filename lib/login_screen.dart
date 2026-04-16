@@ -12,7 +12,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  String _selectedRegion = 'Select region';
+  final List<String> _regions = ['Select region', 'OCE', 'Asia', 'Europe', 'NA', 'SA', 'Unknown'];
   
   bool _isLogin = true; 
   bool _isLoading = false; 
@@ -20,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -57,18 +61,46 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } else {
+      if (_usernameController.text.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please choose a username."))
+          );
+        }
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      if (_selectedRegion == 'Select region' || _selectedRegion.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please select your region."))
+          );
+        }
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
       var user = await _authService.signUp(
         _emailController.text.trim(), 
         _passwordController.text.trim(),
+        _usernameController.text.trim(),
+        _selectedRegion,
         0, 0, 0, 0 
       );
 
       if (user != null) {
-         print("Account Created!");
+        final userData = await _authService.getUserData(user.uid);
+        final username = userData?['username'] ?? 'your account';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Account Created! Your username is $username."))
+          );
+        }
       } else {
          if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text("Sign Up Failed. Try a different email."))
+             SnackBar(content: Text(_authService.lastSignUpError ?? "Sign Up failed. Username may be invalid or already in use."))
            );
          }
       }
@@ -133,6 +165,53 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 15),
+                        if (!_isLogin) ...[
+                          TextField(
+                            controller: _usernameController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.person_outline, color: Colors.white38),
+                              labelText: "Username",
+                              labelStyle: const TextStyle(color: Colors.white38),
+                              filled: true,
+                              fillColor: Colors.white.withValues(alpha: 0.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20), 
+                                borderSide: BorderSide.none
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedRegion,
+                            dropdownColor: const Color(0xFF1C1C21),
+                            icon: const Icon(Icons.public, color: Colors.white38),
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.public, color: Colors.white38),
+                              labelText: 'Region',
+                              labelStyle: const TextStyle(color: Colors.white38),
+                              filled: true,
+                              fillColor: Colors.white.withValues(alpha: 0.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            items: _regions.map((region) {
+                              return DropdownMenuItem<String>(
+                                value: region,
+                                child: Text(region, style: const TextStyle(color: Colors.white)),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedRegion = value);
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 15),
+                        ],
 
                         TextField(
                           controller: _passwordController,
@@ -150,6 +229,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
+                        if (!_isLogin)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12.0),
+                            child: Text(
+                              "Choose your username during sign-up. It must be unique and use letters, numbers, or underscores.",
+                              style: TextStyle(color: Colors.white38, fontSize: 12),
+                            ),
+                          ),
                         const SizedBox(height: 40),
 
                         _isLoading 

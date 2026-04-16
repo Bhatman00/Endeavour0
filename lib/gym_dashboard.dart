@@ -39,7 +39,7 @@ class _GymDashboardState extends State<GymDashboard> {
             _skillElo = data['skillElo'] ?? 0;
             _effortElo = data['effortElo'] ?? 0;
 
-            if (_skillElo > 0) {
+            if (_skillElo > 0 || _effortElo > 0 || data.containsKey('bench') || data.containsKey('squat') || data.containsKey('deadlift')) {
               _prsSet = true;
             }
           });
@@ -72,6 +72,17 @@ class _GymDashboardState extends State<GymDashboard> {
     return Colors.purpleAccent;
   }
 
+  String _formatElo(int elo) {
+    if (elo < 1000) return elo.toString();
+    if (elo < 1000000) {
+      return '${(elo / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+    }
+    if (elo < 1000000000) {
+      return '${(elo / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+    }
+    return '${(elo / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
+  }
+
   void _calculateBaseline() async {
     int b = int.tryParse(_bench.text) ?? 0;
     int s = int.tryParse(_squat.text) ?? 0;
@@ -93,12 +104,12 @@ class _GymDashboardState extends State<GymDashboard> {
       String? uid = FirebaseAuth.instance.currentUser?.uid;
 
       if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'bench': b,
           'squat': s,
           'deadlift': d,
           'skillElo': initialSkill,
-        });
+        }, SetOptions(merge: true));
 
         if (mounted) Navigator.of(context).pop(); 
 
@@ -124,9 +135,9 @@ class _GymDashboardState extends State<GymDashboard> {
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'effortElo': FieldValue.increment(mins),
-        });
+        }, SetOptions(merge: true));
       }
     }
   }
@@ -220,7 +231,7 @@ class _GymDashboardState extends State<GymDashboard> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              "$_totalElo", 
+              _formatElo(_totalElo),
               style: const TextStyle(fontSize: 100, fontWeight: FontWeight.w900, height: 0.9, color: Colors.white)
             ),
           ),

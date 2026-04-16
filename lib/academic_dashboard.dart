@@ -46,7 +46,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
             _academicSkillElo = data['academicSkillElo'] ?? 0;
             _academicEffortElo = data['academicEffortElo'] ?? 0;
             
-            if (data.containsKey('academicMultiplier')) {
+            if (_academicSkillElo > 0 || _academicEffortElo > 0 || data.containsKey('academicMultiplier')) {
               _baselineSet = true;
             }
           });
@@ -73,6 +73,17 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
     return Colors.deepPurpleAccent;
   }
 
+  String _formatElo(int elo) {
+    if (elo < 1000) return elo.toString();
+    if (elo < 1000000) {
+      return '${(elo / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+    }
+    if (elo < 1000000000) {
+      return '${(elo / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+    }
+    return '${(elo / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
+  }
+
   void _calculateAcademicBaseline() async {
     int grade = int.tryParse(_gradeController.text) ?? 0;
 
@@ -93,12 +104,12 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
       String? uid = FirebaseAuth.instance.currentUser?.uid;
 
       if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'academicSkillElo': initialSkill,
           'academicGrade': grade,
           'academicMultiplier': multiplier,
           'academicLevelString': _selectedLevel,
-        });
+        }, SetOptions(merge: true));
 
         if (mounted) Navigator.of(context).pop();
 
@@ -124,9 +135,9 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'academicEffortElo': FieldValue.increment(mins),
-        });
+        }, SetOptions(merge: true));
       }
     }
   }
@@ -174,7 +185,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              "$_totalElo", 
+              _formatElo(_totalElo),
               style: const TextStyle(fontSize: 100, fontWeight: FontWeight.w900, height: 0.9, color: Colors.white)
             ),
           ),
@@ -251,7 +262,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                   const SizedBox(height: 40),
                   
                   DropdownButtonFormField<String>(
-                    value: _selectedLevel,
+                    initialValue: _selectedLevel,
                     dropdownColor: const Color(0xFF1A1A21),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
