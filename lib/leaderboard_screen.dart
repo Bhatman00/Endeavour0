@@ -7,6 +7,7 @@ import 'profile_screen.dart';
 class LeaderboardUser {
   final String uid;
   final String username;
+  final String? photoUrl;
   final int totalElo;
   final int gymElo;
   final int academicElo;
@@ -17,6 +18,7 @@ class LeaderboardUser {
   LeaderboardUser({
     required this.uid,
     required this.username,
+    this.photoUrl,
     required this.totalElo,
     required this.gymElo,
     required this.academicElo,
@@ -53,6 +55,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     'Art Elo',
   ];
 
+  late Future<List<LeaderboardUser>> _usersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = _loadUsers();
+  }
+
   int _toInt(dynamic value) {
     if (value is int) return value;
     if (value is double) return value.toInt();
@@ -85,7 +95,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   Future<List<LeaderboardUser>> _loadUsers() async {
     final snapshot = await FirebaseFirestore.instance.collection('users').get();
-    final users = snapshot.docs.map((doc) {
+    final users = snapshot.docs
+        .where((doc) => doc.data()['isPrivate'] != true)
+        .map((doc) {
       final data = doc.data();
       final uid = doc.id;
       final username = (data['username'] as String?)?.trim();
@@ -101,6 +113,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         username: username != null && username.isNotEmpty
             ? username
             : 'Unknown',
+        photoUrl: data['photoUrl'],
         totalElo: totalElo,
         gymElo: gymElo,
         academicElo: academicElo,
@@ -110,13 +123,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       );
     }).toList();
 
-    users.sort((a, b) {
-      if (_selectedSort == 'Gym Elo') return b.gymElo.compareTo(a.gymElo);
-      if (_selectedSort == 'Academic Elo')
-        return b.academicElo.compareTo(a.academicElo);
-      if (_selectedSort == 'Art Elo') return b.artElo.compareTo(a.artElo);
-      return b.totalElo.compareTo(a.totalElo);
-    });
     return users;
   }
 
@@ -169,7 +175,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
         body: SafeArea(
           child: FutureBuilder<List<LeaderboardUser>>(
-            future: _loadUsers(),
+            future: _usersFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -185,11 +191,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 );
               }
               final users = snapshot.data ?? [];
-              final regionalUsers = _filterByRegion(users);
+              
+              // Sort users based on selected criteria
+              final sortedUsers = [...users];
+              sortedUsers.sort((a, b) {
+                if (_selectedSort == 'Gym Elo') return b.gymElo.compareTo(a.gymElo);
+                if (_selectedSort == 'Academic Elo') return b.academicElo.compareTo(a.academicElo);
+                if (_selectedSort == 'Art Elo') return b.artElo.compareTo(a.artElo);
+                return b.totalElo.compareTo(a.totalElo);
+              });
+
+              final regionalUsers = _filterByRegion(sortedUsers);
 
               return TabBarView(
                 children: [
-                  _buildTabContent(users, isRegional: false),
+                  _buildTabContent(sortedUsers, isRegional: false),
                   _buildTabContent(regionalUsers, isRegional: true),
                 ],
               );
@@ -244,7 +260,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   ],
                 ),
               ),
-              child: _buildGlassUserCard(me, myRank, isMine: true),
+              child: LeaderboardCard(
+                user: me,
+                rank: myRank,
+                selectedSort: _selectedSort,
+                isMine: true,
+              ),
             ),
           ),
       ],
@@ -410,18 +431,58 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     }
 
     return ListView.builder(
+      physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPadding),
       itemCount: users.length,
-      itemBuilder: (context, index) =>
-          _buildGlassUserCard(users[index], index + 1),
+      itemBuilder: (context, index) => LeaderboardCard(
+        user: users[index],
+        rank: index + 1,
+        selectedSort: _selectedSort,
+      ),
     );
   }
+}
 
-  Widget _buildGlassUserCard(
-    LeaderboardUser user,
-    int rank, {
-    bool isMine = false,
-  }) {
+class LeaderboardCard extends StatelessWidget {
+  final LeaderboardUser user;
+  final int rank;
+  final String selectedSort;
+  final bool isMine;
+
+  const LeaderboardCard({
+    super.key,
+    required this.user,
+    required this.rank,
+    required this.selectedSort,
+    this.isMine = false,
+  });
+
+  String _formatElo(int elo) {
+    if (elo < 1000) return elo.toString();
+    if (elo < 1000000) {
+      return '${(elo / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+    }
+    if (elo < 1000000000) {
+      return '${(elo / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+    }
+    return '${(elo / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
+  }
+
+  IconData _getSkillIcon(String skill) {
+    switch (skill.toLowerCase()) {
+      case 'gym':
+        return Icons.fitness_center;
+      case 'academic':
+        return Icons.school;
+      case 'art':
+        return Icons.palette;
+      default:
+        return Icons.star;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -462,6 +523,24 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         color: rank == 1 ? Colors.amber : Colors.white54,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.1),
+                      image: user.photoUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(user.photoUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: user.photoUrl == null
+                        ? const Icon(Icons.person, size: 20, color: Colors.white24)
+                        : null,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -519,13 +598,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   const SizedBox(width: 10),
                   Text(
                     _formatElo(
-                      _selectedSort == 'Gym Elo'
+                      selectedSort == 'Gym Elo'
                           ? user.gymElo
-                          : _selectedSort == 'Academic Elo'
-                          ? user.academicElo
-                          : _selectedSort == 'Art Elo'
-                          ? user.artElo
-                          : user.totalElo,
+                          : selectedSort == 'Academic Elo'
+                              ? user.academicElo
+                              : selectedSort == 'Art Elo'
+                                  ? user.artElo
+                                  : user.totalElo,
                     ),
                     style: const TextStyle(
                       color: Colors.white,

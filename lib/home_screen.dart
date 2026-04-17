@@ -9,6 +9,7 @@ import 'groups_screen.dart';
 import 'leaderboard_screen.dart';
 import 'notifications_screen.dart';
 import 'social_service.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -16,55 +17,6 @@ class HomeScreen extends StatelessWidget {
   // Backend logic untouched
   void _signOut() async {
     await FirebaseAuth.instance.signOut();
-  }
-
-  // Reusable widget for creating new paths easily
-  Widget _buildPathCircle(
-    BuildContext context,
-    String title,
-    IconData icon,
-    Color color,
-    Widget destination,
-  ) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => destination),
-          ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              child: Container(
-                height: 120,
-                width: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
-                  border: Border.all(
-                    color: color.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                ),
-                child: Icon(icon, size: 50, color: color),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 15),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: Colors.white70,
-            letterSpacing: 2,
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -152,40 +104,34 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 50),
 
-                    // Wrap automatically handles putting items on the next line when there are too many
                     Wrap(
                       spacing: 40,
                       runSpacing: 40,
                       alignment: WrapAlignment.center,
-                      children: [
-                        _buildPathCircle(
-                          context,
-                          "GYM",
-                          Icons.fitness_center,
-                          Colors.orange,
-                          const GymDashboard(),
+                      children: const [
+                        PathCircle(
+                          title: "GYM",
+                          icon: Icons.fitness_center,
+                          color: Colors.orange,
+                          destination: GymDashboard(),
                         ),
-                        _buildPathCircle(
-                          context,
-                          "ACADEMICS",
-                          Icons.school,
-                          Colors.blueAccent,
-                          const AcademicDashboard(),
+                        PathCircle(
+                          title: "ACADEMICS",
+                          icon: Icons.school,
+                          color: Colors.blueAccent,
+                          destination: AcademicDashboard(),
                         ),
-                        _buildPathCircle(
-                          context,
-                          "ART",
-                          Icons.palette,
-                          Colors.purpleAccent,
-                          const ArtDashboard(),
+                        PathCircle(
+                          title: "ART",
+                          icon: Icons.palette,
+                          color: Colors.purpleAccent,
+                          destination: ArtDashboard(),
                         ),
-                        // Fix 3: Added the missing Leaderboard
-                        _buildPathCircle(
-                          context,
-                          "LEADERBOARD",
-                          Icons.emoji_events,
-                          Colors.amber,
-                          const LeaderboardScreen(),
+                        PathCircle(
+                          title: "LEADERBOARD",
+                          icon: Icons.emoji_events,
+                          color: Colors.amber,
+                          destination: LeaderboardScreen(),
                         ),
                       ],
                     ),
@@ -227,9 +173,151 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
+
+            // Profile Picture - Top Middle
+            Positioned(
+              top: 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {
+                    final uid = FirebaseAuth.instance.currentUser?.uid;
+                    if (uid != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfileScreen(targetUid: uid),
+                        ),
+                      );
+                    }
+                  },
+                  child: StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser?.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      String? photoUrl;
+                      if (snapshot.hasData && snapshot.data!.exists) {
+                        final data =
+                            snapshot.data!.data() as Map<String, dynamic>?;
+                        photoUrl = data?['photoUrl'] as String?;
+                      }
+
+                      return Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.05),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: photoUrl != null
+                              ? Image.network(
+                                  photoUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.person,
+                                        color: Colors.white54,
+                                        size: 35,
+                                      ),
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return const Center(
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        );
+                                      },
+                                )
+                              : const Icon(
+                                  Icons.person,
+                                  color: Colors.white54,
+                                  size: 35,
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class PathCircle extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Widget destination;
+
+  const PathCircle({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.destination,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => destination),
+          ),
+          child: ClipOval(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                height: 120,
+                width: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.05),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(icon, size: 50, color: color),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 15),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.white70,
+            letterSpacing: 2,
+          ),
+        ),
+      ],
     );
   }
 }

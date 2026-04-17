@@ -2,8 +2,11 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 
 import 'group_leaderboard_screen.dart';
+import 'social_service.dart';
+import 'profile_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -14,10 +17,23 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   String? _uid;
+  final SocialService _socialService = SocialService();
   final TextEditingController _joinCodeController = TextEditingController();
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _groupDescriptionController =
       TextEditingController();
+  Widget _buildLoading() {
+    return const Center(
+        child: CircularProgressIndicator(color: Colors.greenAccent));
+  }
+  final TextEditingController _groupSearchController = TextEditingController();
+  final TextEditingController _friendSearchController = TextEditingController();
+
+  List<Map<String, dynamic>> _groupSearchResults = [];
+  List<Map<String, dynamic>> _friendSearchResults = [];
+  bool _isSearchingGroups = false;
+  bool _isSearchingFriends = false;
+
   String? _joinError;
   String? _createError;
   String? _createdGroupCode;
@@ -36,7 +52,189 @@ class _GroupsScreenState extends State<GroupsScreen> {
     _joinCodeController.dispose();
     _groupNameController.dispose();
     _groupDescriptionController.dispose();
+    _groupSearchController.dispose();
+    _friendSearchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _performGroupSearch(String q) async {
+    if (q.trim().isEmpty) {
+      if (mounted) setState(() => _groupSearchResults = []);
+      return;
+    }
+    setState(() => _isSearchingGroups = true);
+    try {
+      final results = await _socialService.searchGroups(q);
+      if (mounted) setState(() => _groupSearchResults = results);
+    } finally {
+      if (mounted) setState(() => _isSearchingGroups = false);
+    }
+  }
+
+  Future<void> _performFriendSearch(String q) async {
+    if (q.trim().isEmpty) {
+      if (mounted) setState(() => _friendSearchResults = []);
+      return;
+    }
+    setState(() => _isSearchingFriends = true);
+    try {
+      final results = await _socialService.searchUsers(q);
+      if (mounted) setState(() => _friendSearchResults = results);
+    } finally {
+      if (mounted) setState(() => _isSearchingFriends = false);
+    }
+  }
+
+  void _showCreateGroupDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(30),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C21).withValues(alpha: 0.9),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(30)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: const BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.all(Radius.circular(2)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      const Text(
+                        'CREATE GROUP',
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Build your group.',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      TextField(
+                        controller: _groupNameController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _inputDecoration('Group name', Icons.edit),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _groupDescriptionController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration:
+                            _inputDecoration('Description', Icons.description),
+                      ),
+                      const SizedBox(height: 20),
+                      StatefulBuilder(
+                        builder: (context, setToggleState) {
+                          return SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Private Group',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: const Text(
+                              'Requires approval from leader to join',
+                              style: TextStyle(color: Colors.white54, fontSize: 12),
+                            ),
+                            value: _isPrivate,
+                            activeColor: Colors.greenAccent,
+                            onChanged: (val) {
+                              setToggleState(() => _isPrivate = val);
+                              setModalState(() {});
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 30),
+                      ElevatedButton(
+                        onPressed: _isCreating
+                            ? null
+                            : () async {
+                                setModalState(() => _isCreating = true);
+                                 await _createGroup(
+                                  _groupNameController.text,
+                                  _groupDescriptionController.text,
+                                  _isPrivate,
+                                );
+                                setModalState(() => _isCreating = false);
+                                if (mounted && _createError == null) {
+                                  Navigator.pop(context);
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.greenAccent,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 60),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: Text(
+                          _isCreating ? 'CREATING...' : 'CREATE GROUP',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (_createError != null) ...[
+                        const SizedBox(height: 15),
+                        Text(
+                          _createError!,
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      prefixIcon: Icon(icon, color: Colors.white38),
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white38),
+      filled: true,
+      fillColor: Colors.white.withValues(alpha: 0.05),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
+      ),
+    );
   }
 
   int _toInt(dynamic value) {
@@ -97,7 +295,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
     throw Exception('Could not generate unique group code.');
   }
 
-  Future<void> _createGroup(String name, String description) async {
+  bool _isPrivate = false;
+
+  Future<void> _createGroup(String name, String description, bool isPrivate) async {
     if (_uid == null) return;
 
     final cleanName = name.trim();
@@ -126,6 +326,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
         'memberCount': 1,
         'members': [_uid],
         'ownerId': _uid,
+        'isPrivate': isPrivate,
         'groupCode': code,
         'groupCodeLower': code.toLowerCase(),
         'createdAt': FieldValue.serverTimestamp(),
@@ -271,169 +472,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
           groupName: group['name'] ?? 'Group',
           groupCode: group['groupCode'] ?? 'UNKNOWN',
           memberIds: members,
+          leaderId: group['ownerId'] ?? '',
+          groupId: group['groupCode'] ?? '',
+          isPrivate: group['isPrivate'] ?? false,
         ),
       ),
     );
   }
 
-  Widget _buildGroupCard(Map<String, dynamic> group, bool isMember) {
-    final String name = group['name'] ?? 'Group';
-    final String description =
-        group['description'] ?? 'Join this team to compete with friends.';
-    final int memberCount = _toInt(group['memberCount']);
-    final String groupCode = group['groupCode'] ?? '??????';
-    final bool isOwner = group['ownerId'] == _uid;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: isMember
-                    ? () => _openGroupLeaderboard(group)
-                    : () => _joinCodeController.text = groupCode,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isMember
-                      ? Colors.greenAccent
-                      : Colors.white24,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: Text(isMember ? 'Leaderboard' : 'Copy code'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(description, style: const TextStyle(color: Colors.white54)),
-          const SizedBox(height: 15),
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _loadGroupMembers(group['members'] ?? []),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  ),
-                );
-              }
-
-              final members = snapshot.data ?? [];
-              final int totalGroupElo = members.fold(
-                0,
-                (sum, member) => sum + (member['elo'] as int),
-              );
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _infoChip(Icons.code, groupCode),
-                      _infoChip(Icons.star, '${_formatElo(totalGroupElo)} Elo'),
-                      _infoChip(Icons.group, '$memberCount members'),
-                      if (isOwner) _infoChip(Icons.shield, 'Owner'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (members.isNotEmpty)
-                    ...members.map((member) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.person,
-                              size: 18,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                '@${member['username']}',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            Text(
-                              '${_formatElo(member['elo'] as int)} Elo',
-                              style: const TextStyle(color: Colors.white54),
-                            ),
-                          ],
-                        ),
-                      );
-                    })
-                  else
-                    const Text(
-                      'No members found yet.',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMyGroupCard(QueryDocumentSnapshot groupDoc) {
-    final group = groupDoc.data() as Map<String, dynamic>;
-    final groupWithId = {
-      ...group,
-      'id': groupDoc.id,
-      'path': groupDoc.reference.path,
-    };
-    return _buildGroupCard(groupWithId, true);
-  }
-
-  Widget _infoChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: Colors.white70),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoading() {
-    return const Center(child: CircularProgressIndicator(color: Colors.white));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -454,7 +500,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final groupsRef = FirebaseFirestore.instance.collection('groups');
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F13),
         appBar: AppBar(
@@ -466,11 +512,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
             unselectedLabelColor: Colors.white54,
             indicatorColor: Colors.greenAccent,
             tabs: [
-              Tab(text: 'Browse'),
               Tab(text: 'My Groups'),
               Tab(text: 'My Friends'),
             ],
           ),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _showCreateGroupDialog,
+          backgroundColor: Colors.greenAccent,
+          child: const Icon(Icons.add, color: Colors.black),
         ),
         body: SafeArea(
           child: StreamBuilder<DocumentSnapshot>(
@@ -482,7 +532,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
               final userData =
                   userSnapshot.data?.data() as Map<String, dynamic>?;
-              final int currentElo = _userElo(userData);
               final List<String> joinedGroups = List<String>.from(
                 userData?['groupPaths'] ?? [],
               );
@@ -514,516 +563,31 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           await userRef.get();
                           await groupsRef.get();
                         },
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 20,
-                          ),
-                          children: [
-                            const Text(
-                              'GROUPS',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                letterSpacing: 2,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Join a group with code or create your own',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ),
-                              padding: const EdgeInsets.all(20),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Your Elo',
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          letterSpacing: 1.5,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _formatElo(currentElo),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 32,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const Icon(
-                                    Icons.leaderboard,
-                                    size: 32,
-                                    color: Colors.greenAccent,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ),
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Join a group',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _joinCodeController,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      prefixIcon: const Icon(
-                                        Icons.qr_code,
-                                        color: Colors.white38,
-                                      ),
-                                      hintText: 'Enter group code',
-                                      hintStyle: const TextStyle(
-                                        color: Colors.white24,
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withValues(
-                                        alpha: 0.05,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ElevatedButton(
-                                    onPressed: _isJoining
-                                        ? null
-                                        : _joinGroupByCode,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.greenAccent,
-                                      foregroundColor: Colors.black,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      minimumSize: const Size.fromHeight(50),
-                                    ),
-                                    child: Text(
-                                      _isJoining ? 'Joining...' : 'Join group',
-                                    ),
-                                  ),
-                                  if (_joinError != null) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _joinError!,
-                                      style: const TextStyle(
-                                        color: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 12),
-                                  if (_createdGroupCode != null) ...[
-                                    const Text(
-                                      'Last created code:',
-                                      style: TextStyle(color: Colors.white54),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _infoChip(Icons.lock, _createdGroupCode!),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ),
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Create a group',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _groupNameController,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      prefixIcon: const Icon(
-                                        Icons.edit,
-                                        color: Colors.white38,
-                                      ),
-                                      hintText: 'Group name',
-                                      hintStyle: const TextStyle(
-                                        color: Colors.white24,
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withValues(
-                                        alpha: 0.05,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: _groupDescriptionController,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      prefixIcon: const Icon(
-                                        Icons.description_outlined,
-                                        color: Colors.white38,
-                                      ),
-                                      hintText: 'Optional description',
-                                      hintStyle: const TextStyle(
-                                        color: Colors.white24,
-                                      ),
-                                      filled: true,
-                                      fillColor: Colors.white.withValues(
-                                        alpha: 0.05,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ElevatedButton(
-                                    onPressed: _isCreating
-                                        ? null
-                                        : () => _createGroup(
-                                            _groupNameController.text,
-                                            _groupDescriptionController.text,
-                                          ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.greenAccent,
-                                      foregroundColor: Colors.black,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      minimumSize: const Size.fromHeight(50),
-                                    ),
-                                    child: Text(
-                                      _isCreating
-                                          ? 'Creating...'
-                                          : 'Create group',
-                                    ),
-                                  ),
-                                  if (_createError != null) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _createError!,
-                                      style: const TextStyle(
-                                        color: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            if (joinedGroups.isNotEmpty) ...[
-                              const Text(
-                                'Joined Groups',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 16,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: sortedGroups
-                                    .where(
-                                      (group) => joinedGroups.contains(
-                                        group.reference.path,
-                                      ),
-                                    )
-                                    .map((group) {
-                                      final groupData =
-                                          group.data() as Map<String, dynamic>;
-                                      return Chip(
-                                        backgroundColor: Colors.greenAccent
-                                            .withValues(alpha: 0.18),
-                                        label: Text(
-                                          groupData['name'] ?? 'Group',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      );
-                                    })
-                                    .toList(),
-                              ),
-                              const SizedBox(height: 20),
-                            ],
-                            if (groups.isEmpty) ...[
-                              const Text(
-                                'No groups created yet.',
-                                style: TextStyle(color: Colors.white54),
-                              ),
-                              const SizedBox(height: 20),
-                              const Text(
-                                'Create a group to start building your squad.',
-                                style: TextStyle(color: Colors.white38),
-                              ),
-                            ] else ...[
-                              const Text(
-                                'Available Groups',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 16,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              ...sortedGroups.map((groupDoc) {
-                                final data =
-                                    groupDoc.data() as Map<String, dynamic>;
-                                final groupPath = groupDoc.reference.path;
-                                final bool isMember = joinedGroups.contains(
-                                  groupPath,
-                                );
-                                final groupWithId = {
-                                  ...data,
-                                  'id': groupDoc.id,
-                                  'path': groupPath,
-                                };
-                                return _buildGroupCard(groupWithId, isMember);
-                              }),
-                            ],
-                            const SizedBox(height: 20),
-                            const Text(
-                              'Pull to refresh groups',
-                              style: TextStyle(
-                                color: Colors.white38,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                        child: _MyGroupsTab(
+                          searchController: _groupSearchController,
+                          onSearch: _performGroupSearch,
+                          isSearching: _isSearchingGroups,
+                          searchResults: _groupSearchResults,
+                          joinedGroups: joinedGroups,
+                          sortedGroups: sortedGroups,
+                          onOpenLeaderboard: _openGroupLeaderboard,
                         ),
                       ),
-                      RefreshIndicator(
-                        onRefresh: () async {
-                          await userRef.get();
-                          await groupsRef.get();
-                        },
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 20,
-                          ),
-                          children: [
-                            const Text(
-                              'MY GROUPS',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                letterSpacing: 2,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Your joined groups and members',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            if (joinedGroups.isEmpty) ...[
-                              const Text(
-                                'You haven’t joined any groups yet.',
-                                style: TextStyle(color: Colors.white54),
-                              ),
-                              const SizedBox(height: 20),
-                              const Text(
-                                'Use the Join group tab to enter a group code.',
-                                style: TextStyle(color: Colors.white38),
-                              ),
-                            ] else ...[
-                              ...sortedGroups
-                                  .where(
-                                    (groupDoc) => joinedGroups.contains(
-                                      groupDoc.reference.path,
-                                    ),
-                                  )
-                                  .map(_buildMyGroupCard),
-                            ],
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
+                      // --- Tab 2: My Friends & Search ---
                       RefreshIndicator(
                         onRefresh: () async {
                           await userRef.get();
                         },
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: userRef.collection('friends').snapshots(),
-                          builder: (context, friendsSnapshot) {
-                            if (friendsSnapshot.connectionState == ConnectionState.waiting) {
-                              return _buildLoading();
-                            }
-                            final friendDocs = friendsSnapshot.data?.docs ?? [];
-                            final friendIds = friendDocs.map((d) => d.id).toList();
-                            
-                            if (friendIds.isEmpty) {
-                              return ListView(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                                children: const [
-                                  Text(
-                                    'MY FRIENDS',
-                                    style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 14),
-                                  ),
-                                  SizedBox(height: 10),
-                                  Text(
-                                    'You have no friends yet',
-                                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                                  ),
-                                  SizedBox(height: 20),
-                                  Text('Add friends from their profile pages to compete on a shared leaderboard.', style: TextStyle(color: Colors.white38)),
-                                ],
-                              );
-                            }
-
-                            final leaderboardIds = [...friendIds, _uid!];
-
-                            return FutureBuilder<List<Map<String, dynamic>>>(
-                              future: _loadGroupMembers(leaderboardIds),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return _buildLoading();
-                                }
-                                final members = snapshot.data ?? [];
-                                return ListView(
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                                  children: [
-                                    const Text(
-                                      'MY FRIENDS',
-                                      style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    const Text(
-                                      'Friend Leaderboard',
-                                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    ...members.asMap().entries.map((entry) {
-                                      final index = entry.key;
-                                      final member = entry.value;
-                                      final isMe = member['uid'] == _uid;
-                                      
-                                      return Container(
-                                        margin: const EdgeInsets.only(bottom: 15),
-                                        padding: const EdgeInsets.all(20),
-                                        decoration: BoxDecoration(
-                                          color: isMe 
-                                              ? Colors.greenAccent.withValues(alpha: 0.1) 
-                                              : Colors.white.withValues(alpha: 0.05),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: isMe 
-                                                ? Colors.greenAccent.withValues(alpha: 0.3)
-                                                : Colors.white.withValues(alpha: 0.1),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              '#${index + 1}',
-                                              style: TextStyle(
-                                                color: index == 0 ? Colors.amber : (isMe ? Colors.greenAccent : Colors.white54),
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 15),
-                                            const Icon(Icons.person, color: Colors.white70),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    member['username'] + (isMe ? ' (You)' : ''),
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    'Top: ${member['topEndeavour']}',
-                                                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Text(
-                                              '${_formatElo(member['elo'] as int)} Elo',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ],
-                                );
-                              },
-                            );
-                          },
+                        child: _FriendsTab(
+                          searchController: _friendSearchController,
+                          onSearch: _performFriendSearch,
+                          isSearching: _isSearchingFriends,
+                          searchResults: _friendSearchResults,
+                          friendIdsStream: userRef.collection('friends').snapshots(),
+                          uid: _uid!,
+                          onLoadMembers: _loadGroupMembers,
+                          formatElo: _formatElo,
+                          socialService: _socialService,
                         ),
                       ),
                     ],
@@ -1032,6 +596,581 @@ class _GroupsScreenState extends State<GroupsScreen> {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MyGroupsTab extends StatelessWidget {
+  final TextEditingController searchController;
+  final Function(String) onSearch;
+  final bool isSearching;
+  final List<Map<String, dynamic>> searchResults;
+  final List<String> joinedGroups;
+  final List<QueryDocumentSnapshot> sortedGroups;
+  final Function(Map<String, dynamic>) onOpenLeaderboard;
+
+  const _MyGroupsTab({
+    required this.searchController,
+    required this.onSearch,
+    required this.isSearching,
+    required this.searchResults,
+    required this.joinedGroups,
+    required this.sortedGroups,
+    required this.onOpenLeaderboard,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      children: [
+        _SearchBar(
+          hint: 'Search groups...',
+          controller: searchController,
+          onSearch: onSearch,
+        ),
+        const SizedBox(height: 25),
+        if (searchController.text.isNotEmpty) ...[
+          const _Header(text: 'GROUP SEARCH'),
+          const SizedBox(height: 15),
+          if (isSearching)
+            const Center(
+                child: CircularProgressIndicator(color: Colors.greenAccent))
+          else if (searchResults.isEmpty)
+            const Center(
+                child: Text('No groups found.',
+                    style: TextStyle(color: Colors.white38)))
+          else
+            ...searchResults.map((group) => _GroupSearchResultCard(
+                  group: group,
+                  isJoined: joinedGroups.contains(
+                    FirebaseFirestore.instance.doc(group['path']).path,
+                  ),
+                )),
+        ] else ...[
+          const _Header(text: 'MY GROUPS'),
+          const SizedBox(height: 15),
+          if (joinedGroups.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text(
+                  'You haven\'t joined any groups yet.\nCreate one or join with a code!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38),
+                ),
+              ),
+            )
+          else
+            ...sortedGroups
+                .where((doc) => joinedGroups.contains(doc.reference.path))
+                .map((doc) {
+              final group = doc.data() as Map<String, dynamic>;
+              return _GroupCard(
+                group: group,
+                onTap: () => onOpenLeaderboard(group),
+              );
+            }),
+          const SizedBox(height: 25),
+          const _Header(text: 'POPULAR GROUPS'),
+          const SizedBox(height: 15),
+          ...sortedGroups
+              .where((doc) => !joinedGroups.contains(doc.reference.path))
+              .take(10)
+              .map((doc) {
+            final group = doc.data() as Map<String, dynamic>;
+            return _GroupCard(
+              group: group,
+              isJoined: false,
+              onTap: () => onOpenLeaderboard(group),
+            );
+          }),
+        ],
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+}
+
+class _GroupCard extends StatelessWidget {
+  final Map<String, dynamic> group;
+  final bool isJoined;
+  final VoidCallback onTap;
+
+  const _GroupCard({
+    required this.group,
+    this.isJoined = true,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 15),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.greenAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Icon(Icons.group, color: Colors.greenAccent),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group['name'] ?? 'Group',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${group['memberCount'] ?? 0} members',
+                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            if (!isJoined)
+              const Icon(Icons.chevron_right, color: Colors.white24)
+            else
+              const Icon(Icons.emoji_events, color: Colors.amber, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupSearchResultCard extends StatefulWidget {
+  final Map<String, dynamic> group;
+  final bool isJoined;
+
+  const _GroupSearchResultCard({required this.group, required this.isJoined});
+
+  @override
+  State<_GroupSearchResultCard> createState() => _GroupSearchResultCardState();
+}
+
+class _GroupSearchResultCardState extends State<_GroupSearchResultCard> {
+  final SocialService _socialService = SocialService();
+  bool _isRequesting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isPrivate = widget.group['isPrivate'] ?? false;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(widget.group['name'] ?? 'Group',
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    if (isPrivate) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.lock_outline, color: Colors.white38, size: 14),
+                    ],
+                  ],
+                ),
+                Text('${widget.group['memberCount'] ?? 0} members',
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 12)),
+              ],
+            ),
+          ),
+          if (widget.isJoined)
+            const Text('JOINED',
+                style: TextStyle(color: Colors.white38, fontSize: 10))
+          else if (_isRequesting)
+            const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent),
+            )
+          else
+            ElevatedButton(
+              onPressed: () async {
+                if (isPrivate) {
+                  setState(() => _isRequesting = true);
+                  try {
+                    await _socialService.requestToJoinGroup(
+                      widget.group['id'],
+                      widget.group['name'] ?? 'Group',
+                      widget.group['ownerId'],
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Join request sent!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Request failed: $e')),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _isRequesting = false);
+                  }
+                } else {
+                  setState(() => _isRequesting = true);
+                  try {
+                    await _socialService.joinGroup(widget.group['id']);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Joined group!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Join failed: $e')),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _isRequesting = false);
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.greenAccent.withValues(alpha: 0.1),
+                foregroundColor: Colors.greenAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(isPrivate ? 'REQUEST' : 'JOIN', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchBar extends StatelessWidget {
+  final String hint;
+  final TextEditingController controller;
+  final Function(String) onSearch;
+
+  const _SearchBar({
+    required this.hint,
+    required this.controller,
+    required this.onSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white),
+        onSubmitted: onSearch,
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white24),
+          prefixIcon: const Icon(Icons.search, color: Colors.white38),
+          suffixIcon: controller.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white38),
+                  onPressed: () {
+                    controller.clear();
+                    onSearch('');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 15),
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  final String text;
+  const _Header({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white54,
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 2,
+      ),
+    );
+  }
+}
+
+class _FriendsTab extends StatelessWidget {
+  final TextEditingController searchController;
+  final Function(String) onSearch;
+  final bool isSearching;
+  final List<Map<String, dynamic>> searchResults;
+  final Stream<QuerySnapshot> friendIdsStream;
+  final String uid;
+  final Future<List<Map<String, dynamic>>> Function(List<dynamic>) onLoadMembers;
+  final String Function(int) formatElo;
+  final SocialService socialService;
+
+  const _FriendsTab({
+    required this.searchController,
+    required this.onSearch,
+    required this.isSearching,
+    required this.searchResults,
+    required this.friendIdsStream,
+    required this.uid,
+    required this.onLoadMembers,
+    required this.formatElo,
+    required this.socialService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      children: [
+        _SearchBar(
+          hint: 'Search users by username or ID...',
+          controller: searchController,
+          onSearch: onSearch,
+        ),
+        const SizedBox(height: 25),
+        if (searchController.text.isNotEmpty) ...[
+          const _Header(text: 'SOCIAL SEARCH'),
+          const SizedBox(height: 15),
+          if (isSearching)
+            const Center(
+                child: CircularProgressIndicator(color: Colors.greenAccent))
+          else if (searchResults.isEmpty)
+            const Center(
+                child: Text('No users found.',
+                    style: TextStyle(color: Colors.white38)))
+          else
+            ...searchResults.map((user) => FriendSearchResultCard(
+                user: user, uid: uid, socialService: socialService)),
+        ] else ...[
+          const _Header(text: 'FRIEND LEADERBOARD'),
+          const SizedBox(height: 15),
+          StreamBuilder<QuerySnapshot>(
+            stream: friendIdsStream,
+            builder: (context, friendsSnapshot) {
+              if (friendsSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.greenAccent));
+              }
+              final friendDocs = friendsSnapshot.data?.docs ?? [];
+              final friendIds = friendDocs.map((d) => d.id).toList();
+
+              return FutureBuilder<List<Map<String, dynamic>>>(
+                future: onLoadMembers([...friendIds, uid]),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                        child:
+                            CircularProgressIndicator(color: Colors.greenAccent));
+                  }
+                  final members = snapshot.data ?? [];
+                  if (members.length <= 1) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Text(
+                          'You have no friends yet.\nSearch for friends to compete!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white38),
+                        ),
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: members.asMap().entries.map((entry) {
+                      return FriendLeaderboardItem(
+                        member: entry.value,
+                        rank: entry.key + 1,
+                        uid: uid,
+                        formatElo: formatElo,
+                      );
+                    }).toList(),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+}
+
+class FriendSearchResultCard extends StatelessWidget {
+  final Map<String, dynamic> user;
+  final String uid;
+  final SocialService socialService;
+
+  const FriendSearchResultCard(
+      {super.key,
+      required this.user,
+      required this.uid,
+      required this.socialService});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isMe = user['uid'] == uid;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            backgroundColor: Colors.white10,
+            child: Icon(Icons.person, color: Colors.white70),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user['username'] ?? 'Unknown',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('ID: ${user['uid']}',
+                    style: const TextStyle(color: Colors.white38, fontSize: 10)),
+              ],
+            ),
+          ),
+          if (!isMe)
+            IconButton(
+              onPressed: () => socialService.sendFriendRequest(user['uid']),
+              icon: const Icon(Icons.person_add, color: Colors.greenAccent),
+            )
+          else
+            const Text('YOU',
+                style: TextStyle(color: Colors.white38, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+}
+
+
+class FriendLeaderboardItem extends StatelessWidget {
+  final Map<String, dynamic> member;
+  final int rank;
+  final String uid;
+  final String Function(int) formatElo;
+
+  const FriendLeaderboardItem({
+    super.key,
+    required this.member,
+    required this.rank,
+    required this.uid,
+    required this.formatElo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isMe = member['uid'] == uid;
+    return GestureDetector(
+      onTap: isMe
+          ? null
+          : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (c) => ProfileScreen(targetUid: member['uid'])),
+              );
+            },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 15),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isMe
+              ? Colors.greenAccent.withValues(alpha: 0.05)
+              : Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isMe
+                ? Colors.greenAccent.withValues(alpha: 0.2)
+                : Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              '#$rank',
+              style: TextStyle(
+                color: rank == 1
+                    ? Colors.amber
+                    : (isMe ? Colors.greenAccent : Colors.white54),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(member['username'] ?? 'User',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
+                      )),
+                  Text('ID: ${member['uid']}',
+                      style: const TextStyle(color: Colors.white24, fontSize: 9)),
+                ],
+              ),
+            ),
+            Text(
+              '${formatElo(member['elo'] ?? 0)} Elo',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
         ),
       ),
     );
