@@ -12,8 +12,8 @@ class AuthService {
   Future<User?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
-        email: email, 
-        password: password
+        email: email,
+        password: password,
       );
       return result.user;
     } catch (e) {
@@ -24,12 +24,22 @@ class AuthService {
 
   // --- 2. SIGN UP & SAVE INITIAL DATA ---
   // We pass the lifting stats here so they are saved immediately upon account creation
-  Future<User?> signUp(String email, String password, String username, String region, int bench, int squat, int deadlift, int initialElo) async {
+  Future<User?> signUp(
+    String email,
+    String password,
+    String username,
+    String region,
+    int bench,
+    int squat,
+    int deadlift,
+    int initialElo,
+  ) async {
     try {
       lastSignUpError = null;
       final usernameValue = _sanitizeUsername(username);
       if (usernameValue.isEmpty) {
-        lastSignUpError = 'Invalid username. Use only letters, numbers, or underscores.';
+        lastSignUpError =
+            'Invalid username. Use only letters, numbers, or underscores.';
         print('Sign Up Error: invalid username');
         return null;
       }
@@ -99,10 +109,11 @@ class AuthService {
   }
 
   Future<bool> _usernameExists(String username) async {
-    final query = await _firestore.collection('users')
-      .where('usernameLower', isEqualTo: username.toLowerCase())
-      .limit(1)
-      .get();
+    final query = await _firestore
+        .collection('users')
+        .where('usernameLower', isEqualTo: username.toLowerCase())
+        .limit(1)
+        .get();
     return query.docs.isNotEmpty;
   }
 
@@ -114,7 +125,11 @@ class AuthService {
   }
 
   Future<String> _buildUniqueUsername(String email) async {
-    String base = email.split('@').first.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '').toLowerCase();
+    String base = email
+        .split('@')
+        .first
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '')
+        .toLowerCase();
     if (base.isEmpty) {
       base = 'user${_random.nextInt(9999)}';
     }
@@ -123,7 +138,11 @@ class AuthService {
     int suffix = 0;
 
     while (true) {
-      final existing = await _firestore.collection('users').where('usernameLower', isEqualTo: candidate).limit(1).get();
+      final existing = await _firestore
+          .collection('users')
+          .where('usernameLower', isEqualTo: candidate)
+          .limit(1)
+          .get();
       if (existing.docs.isEmpty) {
         return candidate;
       }
@@ -134,10 +153,11 @@ class AuthService {
 
   Future<Map<String, dynamic>?> getUserByUsername(String username) async {
     try {
-      final query = await _firestore.collection('users')
-        .where('usernameLower', isEqualTo: username.toLowerCase())
-        .limit(1)
-        .get();
+      final query = await _firestore
+          .collection('users')
+          .where('usernameLower', isEqualTo: username.toLowerCase())
+          .limit(1)
+          .get();
 
       if (query.docs.isNotEmpty) {
         return query.docs.first.data();
@@ -151,7 +171,10 @@ class AuthService {
   // --- 3. RETRIEVE USER DATA ---
   Future<Map<String, dynamic>?> getUserData(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+      DocumentSnapshot doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .get();
       if (doc.exists) {
         return doc.data() as Map<String, dynamic>;
       }
