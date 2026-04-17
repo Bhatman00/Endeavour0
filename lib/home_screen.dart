@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'gym_dashboard.dart';
 import 'academic_dashboard.dart';
+import 'art_dashboard.dart';
 import 'groups_screen.dart';
 import 'leaderboard_screen.dart';
+import 'notifications_screen.dart';
+import 'social_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -79,6 +83,49 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         actions: [
+          StreamBuilder<QuerySnapshot>(
+            stream: SocialService().getNotificationsStream(),
+            builder: (context, snapshot) {
+              int count = snapshot.data?.docs.length ?? 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.notifications_none,
+                      color: Colors.white54,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    ),
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white54),
             onPressed: _signOut,
@@ -124,6 +171,13 @@ class HomeScreen extends StatelessWidget {
                           Icons.school,
                           Colors.blueAccent,
                           const AcademicDashboard(),
+                        ),
+                        _buildPathCircle(
+                          context,
+                          "ART",
+                          Icons.palette,
+                          Colors.purpleAccent,
+                          const ArtDashboard(),
                         ),
                         // Fix 3: Added the missing Leaderboard
                         _buildPathCircle(

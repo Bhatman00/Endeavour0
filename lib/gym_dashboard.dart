@@ -32,14 +32,21 @@ class _GymDashboardState extends State<GymDashboard> {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
       try {
-        DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        DocumentSnapshot doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
         if (doc.exists && mounted) {
           var data = doc.data() as Map<String, dynamic>;
           setState(() {
             _skillElo = data['skillElo'] ?? 0;
             _effortElo = data['effortElo'] ?? 0;
 
-            if (_skillElo > 0 || _effortElo > 0 || data.containsKey('bench') || data.containsKey('squat') || data.containsKey('deadlift')) {
+            if (_skillElo > 0 ||
+                _effortElo > 0 ||
+                data.containsKey('bench') ||
+                data.containsKey('squat') ||
+                data.containsKey('deadlift')) {
               _prsSet = true;
             }
           });
@@ -89,7 +96,9 @@ class _GymDashboardState extends State<GymDashboard> {
     int d = int.tryParse(_deadlift.text) ?? 0;
 
     if (b == 0 && s == 0 && d == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter your stats first!")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter your stats first!")),
+      );
       return;
     }
 
@@ -111,7 +120,7 @@ class _GymDashboardState extends State<GymDashboard> {
           'skillElo': initialSkill,
         }, SetOptions(merge: true));
 
-        if (mounted) Navigator.of(context).pop(); 
+        if (mounted) Navigator.of(context).pop();
 
         setState(() {
           _skillElo = initialSkill;
@@ -120,7 +129,9 @@ class _GymDashboardState extends State<GymDashboard> {
       }
     } catch (e) {
       if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to save: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to save: $e")));
     }
   }
 
@@ -151,9 +162,7 @@ class _GymDashboardState extends State<GymDashboard> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SafeArea(
-        child: _prsSet ? _buildDashboard() : _buildOnboarding(),
-      ),
+      body: SafeArea(child: _prsSet ? _buildDashboard() : _buildOnboarding()),
     );
   }
 
@@ -180,27 +189,43 @@ class _GymDashboardState extends State<GymDashboard> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Container(
-                width: 30, height: 30,
-                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: rankColor, width: 3)),
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: rankColor, width: 3),
+                ),
               ),
               Container(width: 3, height: 40, color: rankColor),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Transform.rotate(angle: 0.5, child: Container(width: 3, height: 30, color: rankColor)),
+                  Transform.rotate(
+                    angle: 0.5,
+                    child: Container(width: 3, height: 30, color: rankColor),
+                  ),
                   const SizedBox(width: 10),
-                  Transform.rotate(angle: -0.5, child: Container(width: 3, height: 30, color: rankColor)),
+                  Transform.rotate(
+                    angle: -0.5,
+                    child: Container(width: 3, height: 30, color: rankColor),
+                  ),
                 ],
-              )
+              ),
             ],
           ),
           Positioned(
             bottom: 50,
             child: Row(
               children: [
-                Transform.rotate(angle: 0.5, child: Container(width: 3, height: 30, color: rankColor)),
+                Transform.rotate(
+                  angle: 0.5,
+                  child: Container(width: 3, height: 30, color: rankColor),
+                ),
                 const SizedBox(width: 40),
-                Transform.rotate(angle: -0.5, child: Container(width: 3, height: 30, color: rankColor)),
+                Transform.rotate(
+                  angle: -0.5,
+                  child: Container(width: 3, height: 30, color: rankColor),
+                ),
               ],
             ),
           ),
@@ -219,7 +244,12 @@ class _GymDashboardState extends State<GymDashboard> {
             fit: BoxFit.scaleDown,
             child: Text(
               getRankName(_totalElo),
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: getRankColor(_totalElo), letterSpacing: 3),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: getRankColor(_totalElo),
+                letterSpacing: 3,
+              ),
             ),
           ),
         ),
@@ -232,13 +262,21 @@ class _GymDashboardState extends State<GymDashboard> {
             fit: BoxFit.scaleDown,
             child: Text(
               _formatElo(_totalElo),
-              style: const TextStyle(fontSize: 100, fontWeight: FontWeight.w900, height: 0.9, color: Colors.white)
+              style: const TextStyle(
+                fontSize: 100,
+                fontWeight: FontWeight.w900,
+                height: 0.9,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
-        const Text("TOTAL ELO", style: TextStyle(color: Colors.white38, letterSpacing: 2)),
+        const Text(
+          "TOTAL ELO",
+          style: TextStyle(color: Colors.white38, letterSpacing: 2),
+        ),
         const Spacer(),
-        
+
         // Liquid Glass Bottom Bar
         ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
@@ -248,7 +286,9 @@ class _GymDashboardState extends State<GymDashboard> {
               padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.05),
-                border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
               ),
               child: Row(
                 children: [
@@ -258,12 +298,18 @@ class _GymDashboardState extends State<GymDashboard> {
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.timer_outlined, color: Colors.white38),
+                        prefixIcon: const Icon(
+                          Icons.timer_outlined,
+                          color: Colors.white38,
+                        ),
                         hintText: "Minutes...",
                         hintStyle: const TextStyle(color: Colors.white24),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
@@ -273,7 +319,7 @@ class _GymDashboardState extends State<GymDashboard> {
                     backgroundColor: getRankColor(_totalElo),
                     elevation: 0,
                     child: const Icon(Icons.add, color: Colors.black),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -283,7 +329,11 @@ class _GymDashboardState extends State<GymDashboard> {
     );
   }
 
-  Widget _styledInput(TextEditingController controller, String label, IconData icon) {
+  Widget _styledInput(
+    TextEditingController controller,
+    String label,
+    IconData icon,
+  ) {
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
@@ -294,12 +344,15 @@ class _GymDashboardState extends State<GymDashboard> {
         labelStyle: const TextStyle(color: Colors.white38),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
-  
-Widget _buildOnboarding() {
+
+  Widget _buildOnboarding() {
     return Center(
       // The SingleChildScrollView prevents the "Bottom Overflow" when the keyboard opens
       child: SingleChildScrollView(
@@ -319,15 +372,30 @@ Widget _buildOnboarding() {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.fitness_center, size: 80, color: Colors.white24),
+                  const Icon(
+                    Icons.fitness_center,
+                    size: 80,
+                    color: Colors.white24,
+                  ),
                   const SizedBox(height: 20),
-                  const Text("GYM BASELINE", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const Text(
+                    "GYM BASELINE",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                   const SizedBox(height: 40),
                   _styledInput(_bench, "Bench Press (kg)", Icons.remove),
                   const SizedBox(height: 15),
                   _styledInput(_squat, "Squat (kg)", Icons.keyboard_arrow_down),
                   const SizedBox(height: 15),
-                  _styledInput(_deadlift, "Deadlift (kg)", Icons.vertical_align_top),
+                  _styledInput(
+                    _deadlift,
+                    "Deadlift (kg)",
+                    Icons.vertical_align_top,
+                  ),
                   const SizedBox(height: 40),
                   ElevatedButton(
                     onPressed: _calculateBaseline,
@@ -336,9 +404,14 @@ Widget _buildOnboarding() {
                       foregroundColor: Colors.black,
                       elevation: 0,
                       minimumSize: const Size(double.infinity, 60),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
-                    child: const Text("START MY JOURNEY", style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      "START MY JOURNEY",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),

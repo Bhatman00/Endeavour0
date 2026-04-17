@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class GroupLeaderboardScreen extends StatelessWidget {
+class GroupLeaderboardScreen extends StatefulWidget {
   final String groupName;
   final String groupCode;
   final List<dynamic> memberIds;
@@ -13,6 +13,19 @@ class GroupLeaderboardScreen extends StatelessWidget {
     required this.groupCode,
     required this.memberIds,
   });
+
+  @override
+  State<GroupLeaderboardScreen> createState() => _GroupLeaderboardScreenState();
+}
+
+class _GroupLeaderboardScreenState extends State<GroupLeaderboardScreen> {
+  String _selectedSort = 'Total Elo';
+  final List<String> _sortOptions = [
+    'Total Elo',
+    'Gym Elo',
+    'Academic Elo',
+    'Art Elo',
+  ];
 
   int _toInt(dynamic value) {
     if (value is int) return value;
@@ -26,7 +39,9 @@ class GroupLeaderboardScreen extends StatelessWidget {
     return _toInt(data['skillElo']) +
         _toInt(data['effortElo']) +
         _toInt(data['academicSkillElo']) +
-        _toInt(data['academicEffortElo']);
+        _toInt(data['academicEffortElo']) +
+        _toInt(data['artSkillElo']) +
+        _toInt(data['artEffortElo']);
   }
 
   String _topEndeavour(Map<String, dynamic>? data) {
@@ -35,11 +50,12 @@ class GroupLeaderboardScreen extends StatelessWidget {
     final int gym = _toInt(data['skillElo']) + _toInt(data['effortElo']);
     final int academic =
         _toInt(data['academicSkillElo']) + _toInt(data['academicEffortElo']);
+    final int art = _toInt(data['artSkillElo']) + _toInt(data['artEffortElo']);
 
-    if (gym == 0 && academic == 0) {
-      return 'Unknown';
-    }
-    return gym >= academic ? 'Gym' : 'Academic';
+    if (gym == 0 && academic == 0 && art == 0) return 'Unknown';
+    if (gym >= academic && gym >= art) return 'Gym';
+    if (academic >= gym && academic >= art) return 'Academic';
+    return 'Art';
   }
 
   String _formatElo(int elo) {
@@ -54,7 +70,7 @@ class GroupLeaderboardScreen extends StatelessWidget {
   }
 
   Future<List<Map<String, dynamic>>> _loadLeaderboardMembers() async {
-    final ids = memberIds.whereType<String>().toList();
+    final ids = widget.memberIds.whereType<String>().toList();
     final futures = ids.map((id) async {
       final doc = await FirebaseFirestore.instance
           .collection('users')
@@ -64,6 +80,9 @@ class GroupLeaderboardScreen extends StatelessWidget {
         return <String, dynamic>{
           'username': 'Unknown',
           'elo': 0,
+          'gymElo': 0,
+          'academicElo': 0,
+          'artElo': 0,
           'topEndeavour': 'Unknown',
         };
       }
@@ -74,11 +93,24 @@ class GroupLeaderboardScreen extends StatelessWidget {
             ? username
             : 'Unknown',
         'elo': _userElo(data),
+        'gymElo': _toInt(data['skillElo']) + _toInt(data['effortElo']),
+        'academicElo':
+            _toInt(data['academicSkillElo']) +
+            _toInt(data['academicEffortElo']),
+        'artElo': _toInt(data['artSkillElo']) + _toInt(data['artEffortElo']),
         'topEndeavour': _topEndeavour(data),
       };
     });
     final members = await Future.wait(futures);
-    members.sort((a, b) => (b['elo'] as int).compareTo(a['elo'] as int));
+    members.sort((a, b) {
+      if (_selectedSort == 'Gym Elo')
+        return (b['gymElo'] as int).compareTo(a['gymElo'] as int);
+      if (_selectedSort == 'Academic Elo')
+        return (b['academicElo'] as int).compareTo(a['academicElo'] as int);
+      if (_selectedSort == 'Art Elo')
+        return (b['artElo'] as int).compareTo(a['artElo'] as int);
+      return (b['elo'] as int).compareTo(a['elo'] as int);
+    });
     return members;
   }
 
@@ -88,6 +120,8 @@ class GroupLeaderboardScreen extends StatelessWidget {
         return Icons.fitness_center;
       case 'academic':
         return Icons.school;
+      case 'art':
+        return Icons.palette;
       default:
         return Icons.star;
     }
@@ -102,7 +136,7 @@ class GroupLeaderboardScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
-          'Leaderboard • $groupName',
+          'Leaderboard • ${widget.groupName}',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -132,7 +166,7 @@ class GroupLeaderboardScreen extends StatelessWidget {
               final members = snapshot.data ?? [];
               final total = members.fold(
                 0,
-                (sum, member) => sum + (member['elo'] as int),
+                (acc, member) => acc + (member['elo'] as int),
               );
 
               return Column(
@@ -155,7 +189,7 @@ class GroupLeaderboardScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                groupName,
+                                widget.groupName,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
@@ -164,7 +198,7 @@ class GroupLeaderboardScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Code: $groupCode',
+                                'Code: ${widget.groupCode}',
                                 style: const TextStyle(color: Colors.white54),
                               ),
                             ],
@@ -204,7 +238,51 @@ class GroupLeaderboardScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 15),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedSort,
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF1C1C21),
+                            icon: const Icon(Icons.sort, color: Colors.white54),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            items: _sortOptions.map((String sortStr) {
+                              return DropdownMenuItem<String>(
+                                value: sortStr,
+                                child: Text(sortStr),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) {
+                              if (newValue != null) {
+                                setState(() => _selectedSort = newValue);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   if (members.isEmpty)
                     const Expanded(
                       child: Center(
@@ -296,7 +374,15 @@ class GroupLeaderboardScreen extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 10),
                                       Text(
-                                        _formatElo(member['elo'] as int),
+                                        _formatElo(
+                                          _selectedSort == 'Gym Elo'
+                                              ? member['gymElo'] as int
+                                              : _selectedSort == 'Academic Elo'
+                                              ? member['academicElo'] as int
+                                              : _selectedSort == 'Art Elo'
+                                              ? member['artElo'] as int
+                                              : member['elo'] as int,
+                                        ),
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,

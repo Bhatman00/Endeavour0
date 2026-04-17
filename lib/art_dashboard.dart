@@ -3,31 +3,31 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-class AcademicDashboard extends StatefulWidget {
-  const AcademicDashboard({super.key});
+class ArtDashboard extends StatefulWidget {
+  const ArtDashboard({super.key});
 
   @override
-  State<AcademicDashboard> createState() => _AcademicDashboardState();
+  State<ArtDashboard> createState() => _ArtDashboardState();
 }
 
-class _AcademicDashboardState extends State<AcademicDashboard> {
+class _ArtDashboardState extends State<ArtDashboard> {
   final TextEditingController _effort = TextEditingController();
   final TextEditingController _gradeController = TextEditingController();
 
   bool _baselineSet = false;
-  int _academicSkillElo = 0;
-  int _academicEffortElo = 0;
+  int _artSkillElo = 0;
+  int _artEffortElo = 0;
 
   final Map<String, double> _levelMultipliers = {
-    'Primary (1x)': 1.0,
-    'Secondary (1.5x)': 1.5,
-    'Bachelors (2x)': 2.0,
-    'Above Bachelors (2.25x)': 2.25,
+    'Beginner (1x)': 1.0,
+    'Intermediate (1.5x)': 1.5,
+    'Advanced (2x)': 2.0,
+    'Professional (2.25x)': 2.25,
   };
 
-  String _selectedLevel = 'Bachelors (2x)';
+  String _selectedLevel = 'Intermediate (1.5x)';
 
-  int get _totalElo => _academicSkillElo + _academicEffortElo;
+  int get _totalElo => _artSkillElo + _artEffortElo;
 
   @override
   void initState() {
@@ -46,36 +46,36 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
         if (doc.exists && mounted) {
           var data = doc.data() as Map<String, dynamic>;
           setState(() {
-            _academicSkillElo = data['academicSkillElo'] ?? 0;
-            _academicEffortElo = data['academicEffortElo'] ?? 0;
+            _artSkillElo = data['artSkillElo'] ?? 0;
+            _artEffortElo = data['artEffortElo'] ?? 0;
 
-            if (_academicSkillElo > 0 ||
-                _academicEffortElo > 0 ||
-                data.containsKey('academicMultiplier')) {
+            if (_artSkillElo > 0 ||
+                _artEffortElo > 0 ||
+                data.containsKey('artMultiplier')) {
               _baselineSet = true;
             }
           });
         }
       } catch (e) {
-        print("Error fetching academic data: $e");
+        print("Error fetching art data: $e");
       }
     }
   }
 
   String getRankName(int elo) {
-    if (elo < 500) return "NOVICE SCHOLAR";
-    if (elo < 1500) return "DEDICATED STUDENT";
-    if (elo < 3500) return "HONOURS RESEARCHER";
-    if (elo < 7000) return "MASTER INNOVATOR";
-    return "CHIEF ARCHITECT";
+    if (elo < 500) return "NOVICE ARTIST";
+    if (elo < 1500) return "DEDICATED CREATOR";
+    if (elo < 3500) return "SKILLED ARTISAN";
+    if (elo < 7000) return "MASTER VIRTUOSO";
+    return "CHIEF VISIONARY";
   }
 
   Color getRankColor(int elo) {
     if (elo < 500) return Colors.blueGrey;
-    if (elo < 1500) return Colors.lightBlue;
-    if (elo < 3500) return Colors.blueAccent;
-    if (elo < 7000) return Colors.indigoAccent;
-    return Colors.deepPurpleAccent;
+    if (elo < 1500) return Colors.pinkAccent;
+    if (elo < 3500) return Colors.deepOrangeAccent;
+    if (elo < 7000) return Colors.amberAccent;
+    return Colors.tealAccent;
   }
 
   String _formatElo(int elo) {
@@ -89,12 +89,12 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
     return '${(elo / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
   }
 
-  void _calculateAcademicBaseline() async {
+  void _calculateArtBaseline() async {
     int grade = int.tryParse(_gradeController.text) ?? 0;
 
     if (grade <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid grade!")),
+        const SnackBar(content: Text("Please enter a valid skill rating!")),
       );
       return;
     }
@@ -112,16 +112,16 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
 
       if (uid != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'academicSkillElo': initialSkill,
-          'academicGrade': grade,
-          'academicMultiplier': multiplier,
-          'academicLevelString': _selectedLevel,
+          'artSkillElo': initialSkill,
+          'artGrade': grade,
+          'artMultiplier': multiplier,
+          'artLevelString': _selectedLevel,
         }, SetOptions(merge: true));
 
         if (mounted) Navigator.of(context).pop();
 
         setState(() {
-          _academicSkillElo = initialSkill;
+          _artSkillElo = initialSkill;
           _baselineSet = true;
         });
       }
@@ -138,14 +138,14 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
 
     if (mins > 0) {
       setState(() {
-        _academicEffortElo += mins;
+        _artEffortElo += mins;
         _effort.clear();
       });
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'academicEffortElo': FieldValue.increment(mins),
+          'artEffortElo': FieldValue.increment(mins),
         }, SetOptions(merge: true));
       }
     }
@@ -187,7 +187,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
         ),
         const SizedBox(height: 40),
 
-        Icon(Icons.computer, size: 120, color: getRankColor(_totalElo)),
+        Icon(Icons.palette, size: 120, color: getRankColor(_totalElo)),
 
         const Spacer(),
         Padding(
@@ -206,7 +206,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
           ),
         ),
         const Text(
-          "ACADEMIC ELO",
+          "ART ELO",
           style: TextStyle(color: Colors.white38, letterSpacing: 2),
         ),
         const Spacer(),
@@ -236,7 +236,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                           Icons.timer_outlined,
                           color: Colors.white38,
                         ),
-                        hintText: "Minutes studied...",
+                        hintText: "Minutes practiced...",
                         hintStyle: const TextStyle(color: Colors.white24),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
@@ -282,10 +282,10 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.school, size: 80, color: Colors.white24),
+                  const Icon(Icons.palette, size: 80, color: Colors.white24),
                   const SizedBox(height: 20),
                   const Text(
-                    "ACADEMIC BASELINE",
+                    "ART BASELINE",
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -300,10 +300,10 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(
-                        Icons.account_balance,
+                        Icons.brush,
                         color: Colors.white38,
                       ),
-                      labelText: "Education Level",
+                      labelText: "Skill Level",
                       labelStyle: const TextStyle(color: Colors.white38),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.05),
@@ -333,11 +333,8 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      prefixIcon: const Icon(
-                        Icons.grade,
-                        color: Colors.white38,
-                      ),
-                      labelText: "Current Grade (e.g. WAM/Average)",
+                      prefixIcon: const Icon(Icons.star, color: Colors.white38),
+                      labelText: "Self-Assessed Skill Rating",
                       labelStyle: const TextStyle(color: Colors.white38),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.05),
@@ -350,7 +347,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
 
                   const SizedBox(height: 40),
                   ElevatedButton(
-                    onPressed: _calculateAcademicBaseline,
+                    onPressed: _calculateArtBaseline,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
@@ -361,7 +358,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                       ),
                     ),
                     child: const Text(
-                      "SET ACADEMIC ELO",
+                      "SET ART ELO",
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
