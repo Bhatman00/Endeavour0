@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
+import 'rank_utils.dart';
+import 'juice_widgets.dart';
 
 class AcademicDashboard extends StatefulWidget {
   const AcademicDashboard({super.key});
@@ -17,6 +20,9 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
   bool _baselineSet = false;
   int _academicSkillElo = 0;
   int _academicEffortElo = 0;
+  String? _previousRankName;
+  bool _showCelebration = false;
+  Rank? _currentRank;
 
   final Map<String, double> _levelMultipliers = {
     'Primary (1x)': 1.0,
@@ -48,6 +54,8 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
           setState(() {
             _academicSkillElo = data['academicSkillElo'] ?? 0;
             _academicEffortElo = data['academicEffortElo'] ?? 0;
+            _currentRank = RankUtils.getRank(_totalElo, RankUtils.academicRanks);
+            _previousRankName = _currentRank?.name;
 
             if (_academicSkillElo > 0 ||
                 _academicEffortElo > 0 ||
@@ -62,21 +70,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
     }
   }
 
-  String getRankName(int elo) {
-    if (elo < 500) return "NOVICE SCHOLAR";
-    if (elo < 1500) return "DEDICATED STUDENT";
-    if (elo < 3500) return "HONOURS RESEARCHER";
-    if (elo < 7000) return "MASTER INNOVATOR";
-    return "CHIEF ARCHITECT";
-  }
-
-  Color getRankColor(int elo) {
-    if (elo < 500) return Colors.blueGrey;
-    if (elo < 1500) return Colors.lightBlue;
-    if (elo < 3500) return Colors.blueAccent;
-    if (elo < 7000) return Colors.indigoAccent;
-    return Colors.deepPurpleAccent;
-  }
+  // Rank methods now handled by RankUtils
 
   String _formatElo(int elo) {
     if (elo < 1000) return elo.toString();
@@ -137,9 +131,21 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
     int mins = int.tryParse(_effort.text) ?? 0;
 
     if (mins > 0) {
+      // Haptic Feedback on Add
+      HapticFeedback.heavyImpact();
+
+      final int newTotal = _totalElo + mins;
+      final newRank = RankUtils.getRank(newTotal, RankUtils.academicRanks);
+
       setState(() {
         _academicEffortElo += mins;
         _effort.clear();
+
+        if (_previousRankName != null && newRank.name != _previousRankName) {
+          _showCelebration = true;
+          _currentRank = newRank;
+        }
+        _previousRankName = newRank.name;
       });
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
@@ -161,19 +167,29 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
-        child: _baselineSet ? _Dashboard(
-          totalElo: _totalElo,
-          effortController: _effort,
-          onAddEffort: _addEffort,
-          rankName: getRankName(_totalElo),
-          rankColor: getRankColor(_totalElo),
-          formatElo: _formatElo(_totalElo),
-        ) : _Onboarding(
-          selectedLevel: _selectedLevel,
-          gradeController: _gradeController,
-          levelMultipliers: _levelMultipliers,
-          onLevelChanged: (val) => setState(() => _selectedLevel = val!),
-          onCalculate: _calculateAcademicBaseline,
+        child: Stack(
+          children: [
+            _baselineSet
+                ? _Dashboard(
+                    totalElo: _totalElo,
+                    effortController: _effort,
+                    onAddEffort: _addEffort,
+                    rank: RankUtils.getRank(_totalElo, RankUtils.academicRanks),
+                  )
+                : _Onboarding(
+                    selectedLevel: _selectedLevel,
+                    gradeController: _gradeController,
+                    levelMultipliers: _levelMultipliers,
+                    onLevelChanged: (val) =>
+                        setState(() => _selectedLevel = val!),
+                    onCalculate: _calculateAcademicBaseline,
+                  ),
+            if (_showCelebration && _currentRank != null)
+              RankUpCelebration(
+                newRank: _currentRank!,
+                onDismiss: () => setState(() => _showCelebration = false),
+              ),
+          ],
         ),
       ),
     );
@@ -184,17 +200,13 @@ class _Dashboard extends StatelessWidget {
   final int totalElo;
   final TextEditingController effortController;
   final VoidCallback onAddEffort;
-  final String rankName;
-  final Color rankColor;
-  final String formatElo;
+  final Rank rank;
 
   const _Dashboard({
     required this.totalElo,
     required this.effortController,
     required this.onAddEffort,
-    required this.rankName,
-    required this.rankColor,
-    required this.formatElo,
+    required this.rank,
   });
 
   @override
@@ -207,31 +219,25 @@ class _Dashboard extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              rankName,
+              rank.name,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: rankColor,
+                color: rank.color,
                 letterSpacing: 3,
               ),
             ),
           ),
         ),
         const SizedBox(height: 40),
-        Icon(Icons.computer, size: 120, color: rankColor),
+        Icon(Icons.computer, size: 120, color: rank.color),
         const Spacer(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(
-              formatElo,
-              style: const TextStyle(
-                fontSize: 100,
-                fontWeight: FontWeight.w900,
-                height: 0.9,
-                color: Colors.white,
-              ),
+            child: RollingEloCounter(
+              value: totalElo,
             ),
           ),
         ),
@@ -278,7 +284,7 @@ class _Dashboard extends StatelessWidget {
                   const SizedBox(width: 15),
                   FloatingActionButton(
                     onPressed: onAddEffort,
-                    backgroundColor: rankColor,
+                    backgroundColor: rank.color,
                     elevation: 0,
                     child: const Icon(Icons.add, color: Colors.black),
                   ),

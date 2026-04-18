@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
+import 'rank_utils.dart';
+import 'juice_widgets.dart';
 
 class GymDashboard extends StatefulWidget {
   const GymDashboard({super.key});
@@ -19,6 +22,9 @@ class _GymDashboardState extends State<GymDashboard> {
   bool _prsSet = false;
   int _skillElo = 0;
   int _effortElo = 0;
+  String? _previousRankName;
+  bool _showCelebration = false;
+  Rank? _currentRank;
 
   int get _totalElo => _skillElo + _effortElo;
 
@@ -41,6 +47,8 @@ class _GymDashboardState extends State<GymDashboard> {
           setState(() {
             _skillElo = data['skillElo'] ?? 0;
             _effortElo = data['effortElo'] ?? 0;
+            _currentRank = RankUtils.getRank(_totalElo, RankUtils.gymRanks);
+            _previousRankName = _currentRank?.name;
 
             if (_skillElo > 0 ||
                 _effortElo > 0 ||
@@ -57,27 +65,7 @@ class _GymDashboardState extends State<GymDashboard> {
     }
   }
 
-  String getRankName(int elo) {
-    if (elo < 500) return "IRON NOVICE";
-    if (elo < 1500) return "BRONZE GRINDER";
-    if (elo < 3500) return "SILVER LIFTER";
-    if (elo < 7000) return "GOLD CRUSHER";
-    if (elo < 12000) return "PLATINUM POWER";
-    if (elo < 20000) return "DIAMOND ELITE";
-    if (elo < 35000) return "MASTER TITAN";
-    if (elo < 55000) return "GRANDMASTER LEGEND";
-    if (elo < 85000) return "MYTHIC VANGUARD";
-    return "CELESTIAL CHAMPION";
-  }
-
-  Color getRankColor(int elo) {
-    if (elo < 500) return Colors.blueGrey;
-    if (elo < 1500) return Colors.brown;
-    if (elo < 3500) return Colors.grey;
-    if (elo < 7000) return Colors.orange;
-    if (elo < 12000) return Colors.cyan;
-    return Colors.purpleAccent;
-  }
+  // Rank methods now handled by RankUtils
 
   String _formatElo(int elo) {
     if (elo < 1000) return elo.toString();
@@ -139,9 +127,21 @@ class _GymDashboardState extends State<GymDashboard> {
     int mins = int.tryParse(_effort.text) ?? 0;
 
     if (mins > 0) {
+      // Haptic Feedback on Add
+      HapticFeedback.heavyImpact();
+      
+      final int newTotal = _totalElo + mins;
+      final newRank = RankUtils.getRank(newTotal, RankUtils.gymRanks);
+      
       setState(() {
         _effortElo += mins;
         _effort.clear();
+        
+        if (_previousRankName != null && newRank.name != _previousRankName) {
+          _showCelebration = true;
+          _currentRank = newRank;
+        }
+        _previousRankName = newRank.name;
       });
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
@@ -163,21 +163,28 @@ class _GymDashboardState extends State<GymDashboard> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
-        child: _prsSet
-            ? _Dashboard(
-                totalElo: _totalElo,
-                effortController: _effort,
-                onAddEffort: _addEffort,
-                rankName: getRankName(_totalElo),
-                rankColor: getRankColor(_totalElo),
-                formatElo: _formatElo(_totalElo),
-              )
-            : _Onboarding(
-                bench: _bench,
-                squat: _squat,
-                deadlift: _deadlift,
-                onCalculate: _calculateBaseline,
+        child: Stack(
+          children: [
+            _prsSet
+                ? _Dashboard(
+                    totalElo: _totalElo,
+                    effortController: _effort,
+                    onAddEffort: _addEffort,
+                    rank: RankUtils.getRank(_totalElo, RankUtils.gymRanks),
+                  )
+                : _Onboarding(
+                    bench: _bench,
+                    squat: _squat,
+                    deadlift: _deadlift,
+                    onCalculate: _calculateBaseline,
+                  ),
+            if (_showCelebration && _currentRank != null)
+              RankUpCelebration(
+                newRank: _currentRank!,
+                onDismiss: () => setState(() => _showCelebration = false),
               ),
+          ],
+        ),
       ),
     );
   }
@@ -260,17 +267,13 @@ class _Dashboard extends StatelessWidget {
   final int totalElo;
   final TextEditingController effortController;
   final VoidCallback onAddEffort;
-  final String rankName;
-  final Color rankColor;
-  final String formatElo;
+  final Rank rank;
 
   const _Dashboard({
     required this.totalElo,
     required this.effortController,
     required this.onAddEffort,
-    required this.rankName,
-    required this.rankColor,
-    required this.formatElo,
+    required this.rank,
   });
 
   @override
@@ -283,31 +286,25 @@ class _Dashboard extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              rankName,
+              rank.name,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: rankColor,
+                color: rank.color,
                 letterSpacing: 3,
               ),
             ),
           ),
         ),
         const SizedBox(height: 20),
-        _StaticStickMan(rankColor: rankColor),
+        _StaticStickMan(rankColor: rank.color),
         const Spacer(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(
-              formatElo,
-              style: const TextStyle(
-                fontSize: 100,
-                fontWeight: FontWeight.w900,
-                height: 0.9,
-                color: Colors.white,
-              ),
+            child: RollingEloCounter(
+              value: totalElo,
             ),
           ),
         ),
@@ -354,7 +351,7 @@ class _Dashboard extends StatelessWidget {
                   const SizedBox(width: 15),
                   FloatingActionButton(
                     onPressed: onAddEffort,
-                    backgroundColor: rankColor,
+                    backgroundColor: rank.color,
                     elevation: 0,
                     child: const Icon(Icons.add, color: Colors.black),
                   ),
