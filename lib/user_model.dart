@@ -23,6 +23,12 @@ class UserModel {
   final int academicEffortElo;
   final int artSkillElo;
   final int artEffortElo;
+
+  // Art System
+  final int critiqueTokens;
+  final bool isRankedInArt;
+  final List<String> placementArtIds;
+  final double artSkillMultiplier;
   
   final List<String> groupPaths;
   final DateTime? createdAt;
@@ -46,6 +52,10 @@ class UserModel {
     this.academicEffortElo = 0,
     this.artSkillElo = 0,
     this.artEffortElo = 0,
+    this.critiqueTokens = 0,
+    this.isRankedInArt = false,
+    this.placementArtIds = const [],
+    this.artSkillMultiplier = 0.2,
     this.groupPaths = const [],
     this.createdAt,
   });
@@ -77,6 +87,10 @@ class UserModel {
       'academicEffortElo': academicEffortElo,
       'artSkillElo': artSkillElo,
       'artEffortElo': artEffortElo,
+      'critiqueTokens': critiqueTokens,
+      'isRankedInArt': isRankedInArt,
+      'placementArtIds': placementArtIds,
+      'artSkillMultiplier': artSkillMultiplier,
       'groupPaths': groupPaths,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
@@ -103,6 +117,10 @@ class UserModel {
       academicEffortElo: (map['academicEffortElo'] ?? 0).toInt(),
       artSkillElo: (map['artSkillElo'] ?? 0).toInt(),
       artEffortElo: (map['artEffortElo'] ?? 0).toInt(),
+      critiqueTokens: (map['critiqueTokens'] ?? 0).toInt(),
+      isRankedInArt: map['isRankedInArt'] ?? false,
+      placementArtIds: List<String>.from(map['placementArtIds'] ?? []),
+      artSkillMultiplier: (map['artSkillMultiplier'] ?? 0.2).toDouble(),
       groupPaths: List<String>.from(map['groupPaths'] ?? []),
       createdAt: map['createdAt'] is Timestamp ? (map['createdAt'] as Timestamp).toDate() : null,
     );

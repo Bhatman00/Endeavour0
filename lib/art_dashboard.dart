@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'art_service.dart';
+import 'art_model.dart';
+import 'user_model.dart';
 import 'rank_utils.dart';
 import 'juice_widgets.dart';
 
@@ -14,213 +18,388 @@ class ArtDashboard extends StatefulWidget {
 }
 
 class _ArtDashboardState extends State<ArtDashboard> {
-  final TextEditingController _effort = TextEditingController();
-  final TextEditingController _gradeController = TextEditingController();
+  final ArtService _artService = ArtService();
+  final TextEditingController _effortController = TextEditingController();
+  final TextEditingController _commentController = TextEditingController();
 
-  bool _baselineSet = false;
-  int _artSkillElo = 0;
-  int _artEffortElo = 0;
-  String? _previousRankName;
-  bool _showCelebration = false;
-  bool _showGlow = false;
-  Color _glowColor = Colors.white;
-  Rank? _currentRank;
-
-  final Map<String, double> _levelMultipliers = {
-    'Beginner': 1.0,
-    'Intermediate': 1.5,
-    'Advanced': 2.0,
-    'Professional': 2.25,
-  };
-
-  String _selectedLevel = 'Intermediate';
-
-  int get _totalElo => _artSkillElo + _artEffortElo;
+  UserModel? _currentUser;
+  List<ArtModel> _assessmentFeed = [];
+  bool _isLoading = true;
+  File? _selectedImage;
+  ArtModel? _currentRatingArt;
+  bool _showRatingDialog = false;
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
+    _fetchAssessmentFeed();
   }
 
   Future<void> _fetchUserData() async {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
-      try {
-        DocumentSnapshot doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
-        if (doc.exists && mounted) {
-          var data = doc.data() as Map<String, dynamic>;
-          setState(() {
-            _artSkillElo = data['artSkillElo'] ?? 0;
-            _artEffortElo = data['artEffortElo'] ?? 0;
-            _currentRank = RankUtils.getRank(_totalElo, RankUtils.artRanks);
-            _previousRankName = _currentRank?.name;
-            _glowColor = _currentRank?.color ?? Colors.white;
-
-            if (_artSkillElo > 0 ||
-                _artEffortElo > 0 ||
-                data.containsKey('artMultiplier')) {
-              _baselineSet = true;
-            }
-          });
-          if (_baselineSet) {
-            setState(() => _showGlow = true);
-            Future.delayed(const Duration(seconds: 1), () {
-              if (mounted) setState(() => _showGlow = false);
-            });
-          }
-        }
-      } catch (e) {
-        print("Error fetching art data: $e");
-      }
-    }
-  }
-
-  // Rank methods now handled by RankUtils
-
-  String _formatElo(int elo) {
-    if (elo < 1000) return elo.toString();
-    if (elo < 1000000) {
-      return '${(elo / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
-    }
-    if (elo < 1000000000) {
-      return '${(elo / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
-    }
-    return '${(elo / 1000000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}B';
-  }
-
-  void _calculateArtBaseline() async {
-    int grade = int.tryParse(_gradeController.text) ?? 0;
-
-    if (grade <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid skill rating!")),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      double multiplier = _levelMultipliers[_selectedLevel]!;
-      int initialSkill = (grade * multiplier).round();
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-
-      if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'artSkillElo': initialSkill,
-          'artGrade': grade,
-          'artMultiplier': multiplier,
-          'artLevelString': _selectedLevel,
-        }, SetOptions(merge: true));
-
-        if (mounted) Navigator.of(context).pop();
-
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (doc.exists) {
         setState(() {
-          _artSkillElo = initialSkill;
-          _baselineSet = true;
+          _currentUser = UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
         });
       }
-    } catch (e) {
-      if (mounted && Navigator.canPop(context)) Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to save: $e")));
+    }
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _fetchAssessmentFeed() async {
+    _assessmentFeed = await _artService.getAssessmentFeed();
+    setState(() {});
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+      });
     }
   }
 
-  void _addEffort() async {
-    int mins = int.tryParse(_effort.text) ?? 0;
+  Future<void> _uploadArt() async {
+    if (_selectedImage == null) return;
 
-    if (mins > 0) {
-      // Haptic Feedback on Add
-      HapticFeedback.heavyImpact();
-
-      final int newTotal = _totalElo + mins;
-      final newRank = RankUtils.getRank(newTotal, RankUtils.artRanks);
-
-      setState(() {
-        _artEffortElo += mins;
-        _effort.clear();
-
-        if (_previousRankName != null && newRank.name != _previousRankName) {
-          _showCelebration = true;
-          _currentRank = newRank;
-          _glowColor = newRank.color;
-          _showGlow = true;
-        }
-        _previousRankName = newRank.name;
-      });
-
-      // Glow for input
-      setState(() => _showGlow = true);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) setState(() => _showGlow = false);
-      });
-
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'artEffortElo': FieldValue.increment(mins),
-        }, SetOptions(merge: true));
+    try {
+      bool canUpload = await _artService.canUploadArt();
+      if (!canUpload) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not enough critique tokens!')),
+        );
+        return;
       }
+
+      // For now, just use a placeholder URL. In real app, upload to storage
+      String imageUrl = 'placeholder_${DateTime.now().millisecondsSinceEpoch}';
+
+      bool isPlacement = _currentUser != null && !_currentUser!.isRankedInArt;
+
+      await _artService.uploadArt(imageUrl, isPlacement);
+      await _artService.spendTokensForUpload();
+
+      if (isPlacement && _currentUser != null) {
+        // Check if now have 5 placements
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
+        UserModel updatedUser = UserModel.fromMap(userDoc.data() as Map<String, dynamic>, userDoc.id);
+        if (updatedUser.placementArtIds.length == 5) {
+          await _artService.calculateStartingSkillElo(_currentUser!.uid);
+        }
+      }
+
+      _fetchUserData();
+      setState(() => _selectedImage = null);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Art uploaded successfully!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error uploading art: $e')),
+      );
+    }
+  }
+
+  void _showRatingDialogForArt(ArtModel art) {
+    setState(() {
+      _currentRatingArt = art;
+      _showRatingDialog = true;
+    });
+  }
+
+  Future<void> _submitRating(int rating) async {
+    if (_currentRatingArt == null) return;
+
+    try {
+      await _artService.rateArt(_currentRatingArt!.id, rating, _commentController.text.isEmpty ? null : _commentController.text);
+      _fetchAssessmentFeed();
+      _fetchUserData();
+      setState(() {
+        _showRatingDialog = false;
+        _currentRatingArt = null;
+        _commentController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rating submitted! +1 Critique Token')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _logEffort() async {
+    int minutes = int.tryParse(_effortController.text) ?? 0;
+    if (minutes <= 0) return;
+
+    try {
+      await _artService.logEffortTime(minutes);
+      _fetchUserData();
+      _effortController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Effort logged!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error logging effort: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading || _currentUser == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F0F13),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F13),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Art Dashboard', style: TextStyle(color: Colors.white)),
       ),
-      body: SafeArea(
-        child: Container(
-          decoration: _showGlow
-              ? BoxDecoration(
-                  border: Border.all(color: _glowColor.withOpacity(0.7), width: 4),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _glowColor.withOpacity(0.4),
-                      blurRadius: 30,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                )
-              : null,
-          child: Stack(
-            children: [
-              if (_baselineSet)
-                _Dashboard(
-                    totalElo: _totalElo,
-                    effortController: _effort,
-                    onAddEffort: _addEffort,
-                    rank: RankUtils.getRank(_totalElo, RankUtils.artRanks),
-                  )
-              else
-                _Onboarding(
-                    selectedLevel: _selectedLevel,
-                    levelMultipliers: _levelMultipliers,
-                    gradeController: _gradeController,
-                    onLevelChanged: (val) => setState(() => _selectedLevel = val!),
-                    onCalculate: _calculateArtBaseline,
-                  ),
-              if (_showCelebration && _currentRank != null)
-                RankUpCelebration(
-                  newRank: _currentRank!,
-                  onDismiss: () => setState(() => _showCelebration = false),
-                ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // User Stats
+            _buildStatsCard(),
+            const SizedBox(height: 20),
+
+            // Upload Section
+            _buildUploadSection(),
+            const SizedBox(height: 20),
+
+            // Assessment Feed
+            _buildAssessmentFeed(),
+            const SizedBox(height: 20),
+
+            // Effort Logging
+            _buildEffortSection(),
+
+            // Rating Dialog
+            if (_showRatingDialog && _currentRatingArt != null) _buildRatingDialog(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsCard() {
+    Rank? rank = RankUtils.getRank(_currentUser!.artElo, RankUtils.artRanks);
+    return Card(
+      color: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text('Art Stats', style: TextStyle(color: rank?.color ?? Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _statItem('Skill Elo', _currentUser!.artSkillElo.toString()),
+                _statItem('Effort Elo', _currentUser!.artEffortElo.toString()),
+                _statItem('Total Elo', _currentUser!.artElo.toString()),
+                _statItem('Tokens', _currentUser!.critiqueTokens.toString()),
+              ],
+            ),
+            if (!_currentUser!.isRankedInArt) ...[
+              const SizedBox(height: 10),
+              Text('Unranked - Complete 5 placement uploads to get ranked!', style: TextStyle(color: Colors.yellow)),
+              LinearProgressIndicator(value: _currentUser!.placementArtIds.length / 5),
             ],
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statItem(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _buildUploadSection() {
+    return Card(
+      color: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('Upload Art', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            if (_selectedImage != null)
+              Image.file(_selectedImage!, height: 200, fit: BoxFit.cover)
+            else
+              Container(
+                height: 200,
+                color: Colors.grey[800],
+                child: const Center(child: Text('No image selected', style: TextStyle(color: Colors.white54))),
+              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _pickImage,
+                    child: const Text('Pick Image'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _uploadArt,
+                    child: Text(_currentUser!.isRankedInArt ? 'Upload (3 tokens)' : 'Upload Placement'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssessmentFeed() {
+    return Card(
+      color: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('Assessment Feed', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            if (_assessmentFeed.isEmpty)
+              const Text('No art to rate', style: TextStyle(color: Colors.white54))
+            else
+              SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _assessmentFeed.length,
+                  itemBuilder: (context, index) {
+                    ArtModel art = _assessmentFeed[index];
+                    return Container(
+                      width: 200,
+                      margin: const EdgeInsets.only(right: 10),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              color: Colors.grey[800],
+                              child: const Center(child: Text('Art Image', style: TextStyle(color: Colors.white))),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text('${art.ratings.length}/3 ratings', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          ElevatedButton(
+                            onPressed: () => _showRatingDialogForArt(art),
+                            child: const Text('Rate'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEffortSection() {
+    return Card(
+      color: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('Log Practice Time', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _effortController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Minutes practiced (max 120/day)',
+                labelStyle: TextStyle(color: Colors.white54),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+              ),
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: _logEffort,
+              child: Text('Log Effort (+${((_currentUser!.artSkillMultiplier * 120).round())} Elo max)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatingDialog() {
+    return Dialog(
+      backgroundColor: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Rate this Art', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Container(
+              height: 200,
+              color: Colors.grey[800],
+              child: const Center(child: Text('Art Image', style: TextStyle(color: Colors.white))),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                int star = index + 1;
+                return IconButton(
+                  icon: Icon(
+                    Icons.star,
+                    color: Colors.yellow,
+                    size: 30,
+                  ),
+                  onPressed: () => _submitRating(star),
+                );
+              }),
+            ),
+            TextField(
+              controller: _commentController,
+              decoration: const InputDecoration(
+                labelText: 'Optional comment',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: () => setState(() => _showRatingDialog = false),
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
       ),
     );
