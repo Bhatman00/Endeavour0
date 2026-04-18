@@ -13,6 +13,8 @@ class UserModel {
   final int bench;
   final int squat;
   final int deadlift;
+  final double bodyweight; // in kg
+  final String gender; // 'male' or 'female'
 
   // Elo Points
   final int skillElo;
@@ -21,6 +23,12 @@ class UserModel {
   final int academicEffortElo;
   final int artSkillElo;
   final int artEffortElo;
+
+  // Art System
+  final int critiqueTokens;
+  final bool isRankedInArt;
+  final List<String> placementArtIds;
+  final double artSkillMultiplier;
   
   final List<String> groupPaths;
   final DateTime? createdAt;
@@ -36,12 +44,18 @@ class UserModel {
     this.bench = 0,
     this.squat = 0,
     this.deadlift = 0,
+    this.bodyweight = 0.0,
+    this.gender = 'male',
     this.skillElo = 0,
     this.effortElo = 0,
     this.academicSkillElo = 0,
     this.academicEffortElo = 0,
     this.artSkillElo = 0,
     this.artEffortElo = 0,
+    this.critiqueTokens = 0,
+    this.isRankedInArt = false,
+    this.placementArtIds = const [],
+    this.artSkillMultiplier = 0.2,
     this.groupPaths = const [],
     this.createdAt,
   });
@@ -65,12 +79,18 @@ class UserModel {
       'bench': bench,
       'squat': squat,
       'deadlift': deadlift,
+      'bodyweight': bodyweight,
+      'gender': gender,
       'skillElo': skillElo,
       'effortElo': effortElo,
       'academicSkillElo': academicSkillElo,
       'academicEffortElo': academicEffortElo,
       'artSkillElo': artSkillElo,
       'artEffortElo': artEffortElo,
+      'critiqueTokens': critiqueTokens,
+      'isRankedInArt': isRankedInArt,
+      'placementArtIds': placementArtIds,
+      'artSkillMultiplier': artSkillMultiplier,
       'groupPaths': groupPaths,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
@@ -89,12 +109,18 @@ class UserModel {
       bench: (map['bench'] ?? 0).toInt(),
       squat: (map['squat'] ?? 0).toInt(),
       deadlift: (map['deadlift'] ?? 0).toInt(),
+      bodyweight: (map['bodyweight'] ?? 0.0).toDouble(),
+      gender: map['gender'] ?? 'male',
       skillElo: (map['skillElo'] ?? 0).toInt(),
       effortElo: (map['effortElo'] ?? 0).toInt(),
       academicSkillElo: (map['academicSkillElo'] ?? 0).toInt(),
       academicEffortElo: (map['academicEffortElo'] ?? 0).toInt(),
       artSkillElo: (map['artSkillElo'] ?? 0).toInt(),
       artEffortElo: (map['artEffortElo'] ?? 0).toInt(),
+      critiqueTokens: (map['critiqueTokens'] ?? 0).toInt(),
+      isRankedInArt: map['isRankedInArt'] ?? false,
+      placementArtIds: List<String>.from(map['placementArtIds'] ?? []),
+      artSkillMultiplier: (map['artSkillMultiplier'] ?? 0.2).toDouble(),
       groupPaths: List<String>.from(map['groupPaths'] ?? []),
       createdAt: map['createdAt'] is Timestamp ? (map['createdAt'] as Timestamp).toDate() : null,
     );

@@ -264,7 +264,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class PathCircle extends StatelessWidget {
+class PathCircle extends StatefulWidget {
   final String title;
   final IconData icon;
   final Color color;
@@ -279,43 +279,92 @@ class PathCircle extends StatelessWidget {
   });
 
   @override
+  State<PathCircle> createState() => _PathCircleState();
+}
+
+class _PathCircleState extends State<PathCircle> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => destination),
-          ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                height: 120,
-                width: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
-                  border: Border.all(
-                    color: color.withValues(alpha: 0.3),
-                    width: 2,
+        MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => widget.destination),
+            ),
+            child: AnimatedScale(
+              scale: _isHovered ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutBack,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Outer Glow
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: 120,
+                    width: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.color.withValues(
+                            alpha: _isHovered ? 0.3 : 0.0,
+                          ),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Icon(icon, size: 50, color: color),
+                  ClipOval(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 120,
+                        width: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(
+                            alpha: _isHovered ? 0.12 : 0.05,
+                          ),
+                          border: Border.all(
+                            color: widget.color.withValues(
+                              alpha: _isHovered ? 0.6 : 0.3,
+                            ),
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          widget.icon,
+                          size: 50,
+                          color: widget.color,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
         const SizedBox(height: 15),
-        Text(
-          title,
-          style: const TextStyle(
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Colors.white70,
+            color: _isHovered ? widget.color : Colors.white70,
             letterSpacing: 2,
           ),
+          child: Text(widget.title),
         ),
       ],
     );
