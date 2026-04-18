@@ -13,6 +13,8 @@ class UserModel {
   final int bench;
   final int squat;
   final int deadlift;
+  final double bodyweight; // in kg
+  final String gender; // 'male' or 'female'
 
   // Elo Points
   final int skillElo;
@@ -36,6 +38,8 @@ class UserModel {
     this.bench = 0,
     this.squat = 0,
     this.deadlift = 0,
+    this.bodyweight = 0.0,
+    this.gender = 'male',
     this.skillElo = 0,
     this.effortElo = 0,
     this.academicSkillElo = 0,
@@ -65,6 +69,8 @@ class UserModel {
       'bench': bench,
       'squat': squat,
       'deadlift': deadlift,
+      'bodyweight': bodyweight,
+      'gender': gender,
       'skillElo': skillElo,
       'effortElo': effortElo,
       'academicSkillElo': academicSkillElo,
@@ -89,6 +95,8 @@ class UserModel {
       bench: (map['bench'] ?? 0).toInt(),
       squat: (map['squat'] ?? 0).toInt(),
       deadlift: (map['deadlift'] ?? 0).toInt(),
+      bodyweight: (map['bodyweight'] ?? 0.0).toDouble(),
+      gender: map['gender'] ?? 'male',
       skillElo: (map['skillElo'] ?? 0).toInt(),
       effortElo: (map['effortElo'] ?? 0).toInt(),
       academicSkillElo: (map['academicSkillElo'] ?? 0).toInt(),

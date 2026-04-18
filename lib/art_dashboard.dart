@@ -22,16 +22,18 @@ class _ArtDashboardState extends State<ArtDashboard> {
   int _artEffortElo = 0;
   String? _previousRankName;
   bool _showCelebration = false;
+  bool _showGlow = false;
+  Color _glowColor = Colors.white;
   Rank? _currentRank;
 
   final Map<String, double> _levelMultipliers = {
-    'Beginner (1x)': 1.0,
-    'Intermediate (1.5x)': 1.5,
-    'Advanced (2x)': 2.0,
-    'Professional (2.25x)': 2.25,
+    'Beginner': 1.0,
+    'Intermediate': 1.5,
+    'Advanced': 2.0,
+    'Professional': 2.25,
   };
 
-  String _selectedLevel = 'Intermediate (1.5x)';
+  String _selectedLevel = 'Intermediate';
 
   int get _totalElo => _artSkillElo + _artEffortElo;
 
@@ -56,6 +58,7 @@ class _ArtDashboardState extends State<ArtDashboard> {
             _artEffortElo = data['artEffortElo'] ?? 0;
             _currentRank = RankUtils.getRank(_totalElo, RankUtils.artRanks);
             _previousRankName = _currentRank?.name;
+            _glowColor = _currentRank?.color ?? Colors.white;
 
             if (_artSkillElo > 0 ||
                 _artEffortElo > 0 ||
@@ -63,6 +66,12 @@ class _ArtDashboardState extends State<ArtDashboard> {
               _baselineSet = true;
             }
           });
+          if (_baselineSet) {
+            setState(() => _showGlow = true);
+            Future.delayed(const Duration(seconds: 1), () {
+              if (mounted) setState(() => _showGlow = false);
+            });
+          }
         }
       } catch (e) {
         print("Error fetching art data: $e");
@@ -144,8 +153,16 @@ class _ArtDashboardState extends State<ArtDashboard> {
         if (_previousRankName != null && newRank.name != _previousRankName) {
           _showCelebration = true;
           _currentRank = newRank;
+          _glowColor = newRank.color;
+          _showGlow = true;
         }
         _previousRankName = newRank.name;
+      });
+
+      // Glow for input
+      setState(() => _showGlow = true);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _showGlow = false);
       });
 
       String? uid = FirebaseAuth.instance.currentUser?.uid;
@@ -167,28 +184,43 @@ class _ArtDashboardState extends State<ArtDashboard> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            _baselineSet
-                ? _Dashboard(
+        child: Container(
+          decoration: _showGlow
+              ? BoxDecoration(
+                  border: Border.all(color: _glowColor.withOpacity(0.7), width: 4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _glowColor.withOpacity(0.4),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                )
+              : null,
+          child: Stack(
+            children: [
+              if (_baselineSet)
+                _Dashboard(
                     totalElo: _totalElo,
                     effortController: _effort,
                     onAddEffort: _addEffort,
                     rank: RankUtils.getRank(_totalElo, RankUtils.artRanks),
                   )
-                : _Onboarding(
+              else
+                _Onboarding(
                     selectedLevel: _selectedLevel,
                     levelMultipliers: _levelMultipliers,
                     gradeController: _gradeController,
                     onLevelChanged: (val) => setState(() => _selectedLevel = val!),
                     onCalculate: _calculateArtBaseline,
                   ),
-            if (_showCelebration && _currentRank != null)
-              RankUpCelebration(
-                newRank: _currentRank!,
-                onDismiss: () => setState(() => _showCelebration = false),
-              ),
-          ],
+              if (_showCelebration && _currentRank != null)
+                RankUpCelebration(
+                  newRank: _currentRank!,
+                  onDismiss: () => setState(() => _showCelebration = false),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -3,8 +3,12 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import 'rank_utils.dart';
 import 'juice_widgets.dart';
+import 'lifting_utils.dart';
 
 class GymDashboard extends StatefulWidget {
   const GymDashboard({super.key});
@@ -17,7 +21,9 @@ class _GymDashboardState extends State<GymDashboard> {
   final TextEditingController _bench = TextEditingController();
   final TextEditingController _squat = TextEditingController();
   final TextEditingController _deadlift = TextEditingController();
+  final TextEditingController _bodyweight = TextEditingController();
   final TextEditingController _effort = TextEditingController();
+  String _gender = 'male';
 
   bool _prsSet = false;
   int _skillElo = 0;
@@ -47,6 +53,11 @@ class _GymDashboardState extends State<GymDashboard> {
           setState(() {
             _skillElo = data['skillElo'] ?? 0;
             _effortElo = data['effortElo'] ?? 0;
+            _gender = data['gender'] ?? 'male';
+            _bodyweight.text = (data['bodyweight'] ?? 0.0).toString();
+            _bench.text = (data['bench'] ?? 0).toString();
+            _squat.text = (data['squat'] ?? 0).toString();
+            _deadlift.text = (data['deadlift'] ?? 0).toString();
             _currentRank = RankUtils.getRank(_totalElo, RankUtils.gymRanks);
             _previousRankName = _currentRank?.name;
 
@@ -82,10 +93,18 @@ class _GymDashboardState extends State<GymDashboard> {
     int b = int.tryParse(_bench.text) ?? 0;
     int s = int.tryParse(_squat.text) ?? 0;
     int d = int.tryParse(_deadlift.text) ?? 0;
+    double bw = double.tryParse(_bodyweight.text) ?? 0.0;
 
     if (b == 0 && s == 0 && d == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter your stats first!")),
+      );
+      return;
+    }
+
+    if (bw <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter your bodyweight!")),
       );
       return;
     }
@@ -97,7 +116,10 @@ class _GymDashboardState extends State<GymDashboard> {
     );
 
     try {
-      int initialSkill = (b + s + d) * 5;
+      double totalKg = (b + s + d).toDouble();
+      double wilksScore = LiftingUtils.calculateWilksScore(totalKg, bw, _gender);
+      int initialSkill = (wilksScore * 5).toInt(); // Scale for Elo system
+
       String? uid = FirebaseAuth.instance.currentUser?.uid;
 
       if (uid != null) {
@@ -105,6 +127,8 @@ class _GymDashboardState extends State<GymDashboard> {
           'bench': b,
           'squat': s,
           'deadlift': d,
+          'bodyweight': bw,
+          'gender': _gender,
           'skillElo': initialSkill,
         }, SetOptions(merge: true));
 
@@ -120,6 +144,43 @@ class _GymDashboardState extends State<GymDashboard> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Failed to save: $e")));
+    }
+  }
+
+  void _uploadPRPhoto() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        try {
+          // Upload to Firebase Storage
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('pr_photos')
+              .child('$uid.jpg');
+          
+          await storageRef.putFile(File(image.path));
+          
+          // Get download URL
+          final downloadUrl = await storageRef.getDownloadURL();
+          
+          // Save to Firestore
+          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'prPhotoUrl': downloadUrl,
+            'prVerified': true,
+          }, SetOptions(merge: true));
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("PR verified with photo!")),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed to upload: $e")),
+          );
+        }
+      }
     }
   }
 
@@ -153,6 +214,155 @@ class _GymDashboardState extends State<GymDashboard> {
     }
   }
 
+  void _showEditLiftsDialog() {
+    // Create temporary controllers with current values
+    final TextEditingController benchController = TextEditingController(text: _bench.text);
+    final TextEditingController squatController = TextEditingController(text: _squat.text);
+    final TextEditingController deadliftController = TextEditingController(text: _deadlift.text);
+    final TextEditingController bodyweightController = TextEditingController(text: _bodyweight.text);
+    String selectedGender = _gender;
+
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text(
+            'Update Your Lifts',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: isLoading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _StyledInput(controller: benchController, label: "Bench Press (kg)", icon: Icons.remove),
+                      const SizedBox(height: 10),
+                      _StyledInput(controller: squatController, label: "Squat (kg)", icon: Icons.keyboard_arrow_down),
+                      const SizedBox(height: 10),
+                      _StyledInput(controller: deadliftController, label: "Deadlift (kg)", icon: Icons.vertical_align_top),
+                      const SizedBox(height: 10),
+                      _StyledInput(controller: bodyweightController, label: "Bodyweight (kg)", icon: Icons.monitor_weight),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Text(
+                            "Gender:",
+                            style: TextStyle(color: Colors.white38, fontSize: 16),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: DropdownButton<String>(
+                              value: selectedGender,
+                              dropdownColor: Colors.black,
+                              style: const TextStyle(color: Colors.white),
+                              items: const [
+                                DropdownMenuItem(value: 'male', child: Text('Male')),
+                                DropdownMenuItem(value: 'female', child: Text('Female')),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedGender = value);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+          actions: isLoading
+              ? null
+              : [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      int b = int.tryParse(benchController.text) ?? 0;
+                      int s = int.tryParse(squatController.text) ?? 0;
+                      int d = int.tryParse(deadliftController.text) ?? 0;
+                      double bw = double.tryParse(bodyweightController.text) ?? 0.0;
+
+                      if (b == 0 && s == 0 && d == 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Please enter your stats!")),
+                        );
+                        return;
+                      }
+
+                      if (bw <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Please enter your bodyweight!")),
+                        );
+                        return;
+                      }
+
+                      setState(() => isLoading = true);
+
+                      try {
+                        double totalKg = (b + s + d).toDouble();
+                        double wilksScore = LiftingUtils.calculateWilksScore(totalKg, bw, selectedGender);
+                        int newSkill = (wilksScore * 5).toInt();
+
+                        String? uid = FirebaseAuth.instance.currentUser?.uid;
+
+                        if (uid != null) {
+                          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                            'bench': b,
+                            'squat': s,
+                            'deadlift': d,
+                            'bodyweight': bw,
+                            'gender': selectedGender,
+                            'skillElo': newSkill,
+                          }, SetOptions(merge: true));
+
+                          if (mounted) Navigator.of(context).pop();
+
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Lifts updated successfully!")),
+                            );
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _skillElo = newSkill;
+                              _gender = selectedGender;
+                              _bench.text = b.toString();
+                              _squat.text = s.toString();
+                              _deadlift.text = d.toString();
+                              _bodyweight.text = bw.toString();
+                            });
+                          }
+                        }
+                      } catch (e) {
+                        setState(() => isLoading = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Failed to update: $e")),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Update'),
+                  ),
+                ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,6 +371,13 @@ class _GymDashboardState extends State<GymDashboard> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _showEditLiftsDialog,
+            tooltip: 'Edit Lifts',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Stack(
@@ -170,12 +387,16 @@ class _GymDashboardState extends State<GymDashboard> {
                     totalElo: _totalElo,
                     effortController: _effort,
                     onAddEffort: _addEffort,
+                    onUploadPRPhoto: _uploadPRPhoto,
                     rank: RankUtils.getRank(_totalElo, RankUtils.gymRanks),
                   )
                 : _Onboarding(
                     bench: _bench,
                     squat: _squat,
                     deadlift: _deadlift,
+                    bodyweight: _bodyweight,
+                    gender: _gender,
+                    onGenderChanged: (value) => setState(() => _gender = value),
                     onCalculate: _calculateBaseline,
                   ),
             if (_showCelebration && _currentRank != null)
@@ -267,12 +488,14 @@ class _Dashboard extends StatelessWidget {
   final int totalElo;
   final TextEditingController effortController;
   final VoidCallback onAddEffort;
+  final VoidCallback onUploadPRPhoto;
   final Rank rank;
 
   const _Dashboard({
     required this.totalElo,
     required this.effortController,
     required this.onAddEffort,
+    required this.onUploadPRPhoto,
     required this.rank,
   });
 
@@ -325,35 +548,52 @@ class _Dashboard extends StatelessWidget {
                   top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                 ),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: effortController,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(
-                          Icons.timer_outlined,
-                          color: Colors.white38,
-                        ),
-                        hintText: "Minutes...",
-                        hintStyle: const TextStyle(color: Colors.white24),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: effortController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(
+                              Icons.timer_outlined,
+                              color: Colors.white38,
+                            ),
+                            hintText: "Minutes...",
+                            hintStyle: const TextStyle(color: Colors.white24),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 15),
+                      FloatingActionButton(
+                        onPressed: onAddEffort,
+                        backgroundColor: rank.color,
+                        elevation: 0,
+                        child: const Icon(Icons.add, color: Colors.black),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 15),
-                  FloatingActionButton(
-                    onPressed: onAddEffort,
-                    backgroundColor: rank.color,
-                    elevation: 0,
-                    child: const Icon(Icons.add, color: Colors.black),
+                  const SizedBox(height: 15),
+                  ElevatedButton.icon(
+                    onPressed: onUploadPRPhoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text("Verify PR with Photo"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
                   ),
                 ],
               ),
@@ -397,18 +637,30 @@ class _StyledInput extends StatelessWidget {
   }
 }
 
-class _Onboarding extends StatelessWidget {
+class _Onboarding extends StatefulWidget {
   final TextEditingController bench;
   final TextEditingController squat;
   final TextEditingController deadlift;
+  final TextEditingController bodyweight;
+  final String gender;
+  final ValueChanged<String> onGenderChanged;
   final VoidCallback onCalculate;
 
   const _Onboarding({
     required this.bench,
     required this.squat,
     required this.deadlift,
+    required this.bodyweight,
+    required this.gender,
+    required this.onGenderChanged,
     required this.onCalculate,
   });
+
+  @override
+  State<_Onboarding> createState() => _OnboardingState();
+}
+
+class _OnboardingState extends State<_Onboarding> {
 
   @override
   Widget build(BuildContext context) {
@@ -442,14 +694,42 @@ class _Onboarding extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  _StyledInput(controller: bench, label: "Bench Press (kg)", icon: Icons.remove),
+                  _StyledInput(controller: widget.bench, label: "Bench Press (kg)", icon: Icons.remove),
                   const SizedBox(height: 15),
-                  _StyledInput(controller: squat, label: "Squat (kg)", icon: Icons.keyboard_arrow_down),
+                  _StyledInput(controller: widget.squat, label: "Squat (kg)", icon: Icons.keyboard_arrow_down),
                   const SizedBox(height: 15),
-                  _StyledInput(controller: deadlift, label: "Deadlift (kg)", icon: Icons.vertical_align_top),
+                  _StyledInput(controller: widget.deadlift, label: "Deadlift (kg)", icon: Icons.vertical_align_top),
+                  const SizedBox(height: 15),
+                  _StyledInput(controller: widget.bodyweight, label: "Bodyweight (kg)", icon: Icons.monitor_weight),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      const Text(
+                        "Gender:",
+                        style: TextStyle(color: Colors.white38, fontSize: 16),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: DropdownButton<String>(
+                          value: widget.gender,
+                          dropdownColor: Colors.black,
+                          style: const TextStyle(color: Colors.white),
+                          items: const [
+                            DropdownMenuItem(value: 'male', child: Text('Male')),
+                            DropdownMenuItem(value: 'female', child: Text('Female')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              widget.onGenderChanged(value);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 40),
                   ElevatedButton(
-                    onPressed: onCalculate,
+                    onPressed: widget.onCalculate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,

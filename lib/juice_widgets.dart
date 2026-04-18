@@ -27,10 +27,7 @@ class RollingEloCounter extends StatelessWidget {
       duration: duration,
       curve: Curves.outSoap,
       builder: (context, val, child) {
-        return Text(
-          RankUtils.formatElo(val.toInt()),
-          style: style,
-        );
+        return Text(RankUtils.formatElo(val.toInt()), style: style);
       },
     );
   }
@@ -93,11 +90,17 @@ class _RankUpCelebrationState extends State<RankUpCelebration>
     );
 
     _controller.forward();
-    
+
     // Provide haptic feedback on Rank Up
     HapticFeedback.heavyImpact();
-    Future.delayed(const Duration(milliseconds: 100), () => HapticFeedback.heavyImpact());
-    Future.delayed(const Duration(milliseconds: 200), () => HapticFeedback.heavyImpact());
+    Future.delayed(
+      const Duration(milliseconds: 100),
+      () => HapticFeedback.heavyImpact(),
+    );
+    Future.delayed(
+      const Duration(milliseconds: 200),
+      () => HapticFeedback.heavyImpact(),
+    );
   }
 
   @override
@@ -125,7 +128,7 @@ class _RankUpCelebrationState extends State<RankUpCelebration>
               );
             },
           ),
-          
+
           // Celebration Card
           Center(
             child: FadeTransition(

@@ -25,13 +25,13 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
   Rank? _currentRank;
 
   final Map<String, double> _levelMultipliers = {
-    'Primary (1x)': 1.0,
-    'Secondary (1.5x)': 1.5,
-    'Bachelors (2x)': 2.0,
-    'Above Bachelors (2.25x)': 2.25,
+    'Primary': 1.0,
+    'Secondary': 1.5,
+    'Bachelors': 2.0,
+    'Above Bachelors': 2.25,
   };
 
-  String _selectedLevel = 'Bachelors (2x)';
+  String _selectedLevel = 'Bachelors';
 
   int get _totalElo => _academicSkillElo + _academicEffortElo;
 
