@@ -36,7 +36,7 @@ class AuthService {
   ) async {
     try {
       lastSignUpError = null;
-      final usernameValue = _sanitizeUsername(username);
+      final usernameValue = sanitizeUsername(username);
       if (usernameValue.isEmpty) {
         lastSignUpError =
             'Invalid username. Use only letters, numbers, or underscores.';
@@ -64,7 +64,7 @@ class AuthService {
       }
 
       // Now check username uniqueness (user is authenticated)
-      if (await _usernameExists(usernameValue)) {
+      if (!(await isUsernameAvailable(usernameValue))) {
         // Username taken — delete the auth user we just created
         await user.delete();
         lastSignUpError = 'Username is already taken.';
@@ -108,20 +108,46 @@ class AuthService {
     }
   }
 
-  Future<bool> _usernameExists(String username) async {
-    final query = await _firestore
-        .collection('users')
-        .where('usernameLower', isEqualTo: username.toLowerCase())
-        .limit(1)
-        .get();
-    return query.docs.isNotEmpty;
-  }
-
-  String _sanitizeUsername(String username) {
+  String sanitizeUsername(String username) {
     final sanitized = username.trim();
     if (sanitized.isEmpty) return '';
     if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(sanitized)) return '';
     return sanitized;
+  }
+
+  Future<bool> isUsernameAvailable(String username) async {
+    final sanitized = sanitizeUsername(username);
+    if (sanitized.isEmpty) return false;
+    
+    final query = await _firestore
+        .collection('users')
+        .where('usernameLower', isEqualTo: sanitized.toLowerCase())
+        .limit(1)
+        .get();
+    return query.docs.isEmpty;
+  }
+
+  Future<void> updateUsername(String newUsername) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("Not logged in");
+
+    final sanitized = sanitizeUsername(newUsername);
+    if (sanitized.isEmpty) {
+      throw Exception("Invalid username. Use only alphanumeric characters and underscores.");
+    }
+
+    if (!(await isUsernameAvailable(sanitized))) {
+      throw Exception("Username is already taken.");
+    }
+
+    // Update Firestore
+    await _firestore.collection('users').doc(user.uid).update({
+      'username': sanitized,
+      'usernameLower': sanitized.toLowerCase(),
+    });
+
+    // Update Firebase Auth Display Name
+    await user.updateDisplayName(sanitized);
   }
 
   Future<String> _buildUniqueUsername(String email) async {
@@ -188,4 +214,69 @@ class AuthService {
   Future<void> signOut() async {
     await _auth.signOut();
   }
+
+  // --- RE-AUTHENTICATION ---
+  Future<void> reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("No user logged in");
+    if (user.email == null) throw Exception("User has no email");
+
+    AuthCredential credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: password,
+    );
+
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  // --- 5. PROFILE MANAGEMENT ---
+  Future<void> updatePrivacy(bool isPrivate) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await _firestore.collection('users').doc(user.uid).update({
+      'isPrivate': isPrivate,
+    });
+  }
+
+  Future<void> updateProfilePicture(String downloadUrl) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await _firestore.collection('users').doc(user.uid).update({
+      'photoUrl': downloadUrl,
+    });
+    await user.updatePhotoURL(downloadUrl);
+  }
+
+  Future<void> deleteUserAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final uid = user.uid;
+
+    // We try to delete the Auth user FIRST.
+    // This is because if it fails due to 'requires-recent-login', 
+    // we want to catch it before we delete the Firestore doc.
+    try {
+      await user.delete();
+    } catch (e) {
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        throw Exception("reauth-required");
+      }
+      rethrow;
+    }
+
+    // If we reach here, Auth user is deleted.
+    // Now we delete the Firestore document.
+    // Note: If you have security rules requiring auth, this might fail unless 
+    // you have a short grace period or use a cloud function.
+    // However, for this implementation, we will attempt it immediately.
+    try {
+      await _firestore.collection('users').doc(uid).delete();
+    } catch (e) {
+      print("Error deleting Firestore doc (Auth user already gone): $e");
+      // We don't rethrow here as the Auth account is already gone,
+      // and that's the primary goal for account closure.
+    }
+  }
 }
+

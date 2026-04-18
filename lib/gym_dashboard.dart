@@ -162,13 +162,34 @@ class _GymDashboardState extends State<GymDashboard> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SafeArea(child: _prsSet ? _buildDashboard() : _buildOnboarding()),
+      body: SafeArea(
+        child: _prsSet
+            ? _Dashboard(
+                totalElo: _totalElo,
+                effortController: _effort,
+                onAddEffort: _addEffort,
+                rankName: getRankName(_totalElo),
+                rankColor: getRankColor(_totalElo),
+                formatElo: _formatElo(_totalElo),
+              )
+            : _Onboarding(
+                bench: _bench,
+                squat: _squat,
+                deadlift: _deadlift,
+                onCalculate: _calculateBaseline,
+              ),
+      ),
     );
   }
+}
 
-  Widget _buildStaticStickMan() {
-    Color rankColor = getRankColor(_totalElo);
+class _StaticStickMan extends StatelessWidget {
+  final Color rankColor;
 
+  const _StaticStickMan({required this.rankColor});
+
+  @override
+  Widget build(BuildContext context) {
     return SizedBox(
       height: 150,
       width: 150,
@@ -233,8 +254,27 @@ class _GymDashboardState extends State<GymDashboard> {
       ),
     );
   }
+}
 
-  Widget _buildDashboard() {
+class _Dashboard extends StatelessWidget {
+  final int totalElo;
+  final TextEditingController effortController;
+  final VoidCallback onAddEffort;
+  final String rankName;
+  final Color rankColor;
+  final String formatElo;
+
+  const _Dashboard({
+    required this.totalElo,
+    required this.effortController,
+    required this.onAddEffort,
+    required this.rankName,
+    required this.rankColor,
+    required this.formatElo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         const SizedBox(height: 20),
@@ -243,25 +283,25 @@ class _GymDashboardState extends State<GymDashboard> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              getRankName(_totalElo),
+              rankName,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: getRankColor(_totalElo),
+                color: rankColor,
                 letterSpacing: 3,
               ),
             ),
           ),
         ),
         const SizedBox(height: 20),
-        _buildStaticStickMan(),
+        _StaticStickMan(rankColor: rankColor),
         const Spacer(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              _formatElo(_totalElo),
+              formatElo,
               style: const TextStyle(
                 fontSize: 100,
                 fontWeight: FontWeight.w900,
@@ -276,12 +316,10 @@ class _GymDashboardState extends State<GymDashboard> {
           style: TextStyle(color: Colors.white38, letterSpacing: 2),
         ),
         const Spacer(),
-
-        // Liquid Glass Bottom Bar
         ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
@@ -294,7 +332,7 @@ class _GymDashboardState extends State<GymDashboard> {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: _effort,
+                      controller: effortController,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
@@ -315,8 +353,8 @@ class _GymDashboardState extends State<GymDashboard> {
                   ),
                   const SizedBox(width: 15),
                   FloatingActionButton(
-                    onPressed: _addEffort,
-                    backgroundColor: getRankColor(_totalElo),
+                    onPressed: onAddEffort,
+                    backgroundColor: rankColor,
                     elevation: 0,
                     child: const Icon(Icons.add, color: Colors.black),
                   ),
@@ -328,12 +366,21 @@ class _GymDashboardState extends State<GymDashboard> {
       ],
     );
   }
+}
 
-  Widget _styledInput(
-    TextEditingController controller,
-    String label,
-    IconData icon,
-  ) {
+class _StyledInput extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+
+  const _StyledInput({
+    required this.controller,
+    required this.label,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
@@ -351,16 +398,31 @@ class _GymDashboardState extends State<GymDashboard> {
       ),
     );
   }
+}
 
-  Widget _buildOnboarding() {
+class _Onboarding extends StatelessWidget {
+  final TextEditingController bench;
+  final TextEditingController squat;
+  final TextEditingController deadlift;
+  final VoidCallback onCalculate;
+
+  const _Onboarding({
+    required this.bench,
+    required this.squat,
+    required this.deadlift,
+    required this.onCalculate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
-      // The SingleChildScrollView prevents the "Bottom Overflow" when the keyboard opens
       child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(30.0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(30),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
@@ -372,11 +434,7 @@ class _GymDashboardState extends State<GymDashboard> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.fitness_center,
-                    size: 80,
-                    color: Colors.white24,
-                  ),
+                  const Icon(Icons.fitness_center, size: 80, color: Colors.white24),
                   const SizedBox(height: 20),
                   const Text(
                     "GYM BASELINE",
@@ -387,31 +445,22 @@ class _GymDashboardState extends State<GymDashboard> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  _styledInput(_bench, "Bench Press (kg)", Icons.remove),
+                  _StyledInput(controller: bench, label: "Bench Press (kg)", icon: Icons.remove),
                   const SizedBox(height: 15),
-                  _styledInput(_squat, "Squat (kg)", Icons.keyboard_arrow_down),
+                  _StyledInput(controller: squat, label: "Squat (kg)", icon: Icons.keyboard_arrow_down),
                   const SizedBox(height: 15),
-                  _styledInput(
-                    _deadlift,
-                    "Deadlift (kg)",
-                    Icons.vertical_align_top,
-                  ),
+                  _StyledInput(controller: deadlift, label: "Deadlift (kg)", icon: Icons.vertical_align_top),
                   const SizedBox(height: 40),
                   ElevatedButton(
-                    onPressed: _calculateBaseline,
+                    onPressed: onCalculate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
                       elevation: 0,
                       minimumSize: const Size(double.infinity, 60),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Text(
-                      "START MY JOURNEY",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    child: const Text("START MY JOURNEY", style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),

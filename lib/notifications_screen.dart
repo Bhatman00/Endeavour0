@@ -23,6 +23,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return _buildFriendRequestItem(notificationId, data, senderUsername);
     } else if (type == 'group_invite') {
       return _buildGroupInviteItem(notificationId, data, senderUsername);
+    } else if (type == 'join_request') {
+      return _buildJoinRequestItem(notificationId, data, senderUsername);
     }
 
     return const SizedBox.shrink();
@@ -38,18 +40,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       title: 'Friend Request',
       subtitle: '@$senderUsername wants to be friends',
       onAccept: () async {
-        await _socialService.acceptFriendRequest(
-          notificationId,
-          data['senderId'],
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Friend request accepted!')),
+        try {
+          await _socialService.acceptFriendRequest(
+            notificationId,
+            data['senderId'],
           );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Friend request accepted!')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to accept: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
         }
       },
       onDecline: () async {
-        await _socialService.declineNotification(notificationId);
+        try {
+          await _socialService.declineNotification(notificationId);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to decline: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
       },
     );
   }
@@ -65,15 +89,87 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       title: 'Group Invite',
       subtitle: '@$senderUsername invited you to $groupName',
       onAccept: () async {
-        await _socialService.acceptGroupInvite(notificationId, data['groupId']);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Joined group!')));
+        try {
+          await _socialService.acceptGroupInvite(notificationId, data['groupId']);
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Joined group!')));
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to join: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
         }
       },
       onDecline: () async {
-        await _socialService.declineNotification(notificationId);
+        try {
+          await _socialService.declineNotification(notificationId);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to decline: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
+      },
+    );
+  }
+
+  Widget _buildJoinRequestItem(
+    String notificationId,
+    Map<String, dynamic> data,
+    String senderUsername,
+  ) {
+    final groupName = data['groupName'] ?? 'your group';
+    return _buildCardWrapper(
+      icon: Icons.group_add,
+      title: 'Join Request',
+      subtitle: '@$senderUsername wants to join $groupName',
+      onAccept: () async {
+        try {
+          await _socialService.acceptJoinRequest(
+            notificationId,
+            data['groupId'],
+            data['senderId'],
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Request accepted!')));
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to accept: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
+      },
+      onDecline: () async {
+        try {
+          await _socialService.declineNotification(notificationId);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to decline: ${e.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
       },
     );
   }
@@ -195,10 +291,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
           if (snapshot.hasError) {
-            return const Center(
-              child: Text(
-                "Failed to load notifications",
-                style: TextStyle(color: Colors.redAccent),
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(
+                  "Error: ${snapshot.error}",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ),
             );
           }
@@ -227,6 +327,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           return ListView.builder(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(20),
             itemCount: docs.length,
             itemBuilder: (context, index) {

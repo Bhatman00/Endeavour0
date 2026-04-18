@@ -161,12 +161,44 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SafeArea(
-        child: _baselineSet ? _buildDashboard() : _buildOnboarding(),
+        child: _baselineSet ? _Dashboard(
+          totalElo: _totalElo,
+          effortController: _effort,
+          onAddEffort: _addEffort,
+          rankName: getRankName(_totalElo),
+          rankColor: getRankColor(_totalElo),
+          formatElo: _formatElo(_totalElo),
+        ) : _Onboarding(
+          selectedLevel: _selectedLevel,
+          gradeController: _gradeController,
+          levelMultipliers: _levelMultipliers,
+          onLevelChanged: (val) => setState(() => _selectedLevel = val!),
+          onCalculate: _calculateAcademicBaseline,
+        ),
       ),
     );
   }
+}
 
-  Widget _buildDashboard() {
+class _Dashboard extends StatelessWidget {
+  final int totalElo;
+  final TextEditingController effortController;
+  final VoidCallback onAddEffort;
+  final String rankName;
+  final Color rankColor;
+  final String formatElo;
+
+  const _Dashboard({
+    required this.totalElo,
+    required this.effortController,
+    required this.onAddEffort,
+    required this.rankName,
+    required this.rankColor,
+    required this.formatElo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         const SizedBox(height: 20),
@@ -175,27 +207,25 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              getRankName(_totalElo),
+              rankName,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: getRankColor(_totalElo),
+                color: rankColor,
                 letterSpacing: 3,
               ),
             ),
           ),
         ),
         const SizedBox(height: 40),
-
-        Icon(Icons.computer, size: 120, color: getRankColor(_totalElo)),
-
+        Icon(Icons.computer, size: 120, color: rankColor),
         const Spacer(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              _formatElo(_totalElo),
+              formatElo,
               style: const TextStyle(
                 fontSize: 100,
                 fontWeight: FontWeight.w900,
@@ -210,12 +240,10 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
           style: TextStyle(color: Colors.white38, letterSpacing: 2),
         ),
         const Spacer(),
-
-        // Liquid Glass Bottom Bar
         ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               padding: const EdgeInsets.all(30),
               decoration: BoxDecoration(
@@ -228,7 +256,7 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: _effort,
+                      controller: effortController,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
@@ -249,8 +277,8 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
                   ),
                   const SizedBox(width: 15),
                   FloatingActionButton(
-                    onPressed: _addEffort,
-                    backgroundColor: getRankColor(_totalElo),
+                    onPressed: onAddEffort,
+                    backgroundColor: rankColor,
                     elevation: 0,
                     child: const Icon(Icons.add, color: Colors.black),
                   ),
@@ -262,110 +290,113 @@ class _AcademicDashboardState extends State<AcademicDashboard> {
       ],
     );
   }
+}
 
-  Widget _buildOnboarding() {
+class _Onboarding extends StatelessWidget {
+  final String selectedLevel;
+  final TextEditingController gradeController;
+  final Map<String, double> levelMultipliers;
+  final ValueChanged<String?> onLevelChanged;
+  final VoidCallback onCalculate;
+
+  const _Onboarding({
+    required this.selectedLevel,
+    required this.gradeController,
+    required this.levelMultipliers,
+    required this.onLevelChanged,
+    required this.onCalculate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(30.0),
       child: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.school, size: 80, color: Colors.white24),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "ACADEMIC BASELINE",
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedLevel,
-                    dropdownColor: const Color(0xFF1A1A21),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(
-                        Icons.account_balance,
-                        color: Colors.white38,
-                      ),
-                      labelText: "Education Level",
-                      labelStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide.none,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                padding: const EdgeInsets.all(30),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.school, size: 80, color: Colors.white24),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "ACADEMIC BASELINE",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                    items: _levelMultipliers.keys.map((String level) {
-                      return DropdownMenuItem<String>(
-                        value: level,
-                        child: Text(level),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _selectedLevel = newValue;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 15),
-
-                  TextField(
-                    controller: _gradeController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(
-                        Icons.grade,
-                        color: Colors.white38,
+                    const SizedBox(height: 40),
+                    DropdownButtonFormField<String>(
+                      value: selectedLevel,
+                      dropdownColor: const Color(0xFF1A1A21),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.account_balance,
+                            color: Colors.white38),
+                        labelText: "Education Level",
+                        labelStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
-                      labelText: "Current Grade (e.g. WAM/Average)",
-                      labelStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide.none,
-                      ),
+                      items: levelMultipliers.keys.map((String level) {
+                        return DropdownMenuItem<String>(
+                          value: level,
+                          child: Text(level),
+                        );
+                      }).toList(),
+                      onChanged: onLevelChanged,
                     ),
-                  ),
-
-                  const SizedBox(height: 40),
-                  ElevatedButton(
-                    onPressed: _calculateAcademicBaseline,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      minimumSize: const Size(double.infinity, 60),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: gradeController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.grade, color: Colors.white38),
+                        labelText: "Current Grade (e.g. WAM/Average)",
+                        labelStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      "SET ACADEMIC ELO",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(height: 40),
+                    ElevatedButton(
+                      onPressed: onCalculate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        minimumSize: const Size(double.infinity, 60),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                      ),
+                      child: const Text("SET ACADEMIC ELO",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
